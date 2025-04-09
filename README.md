@@ -57,6 +57,12 @@ Plotting_ZHS/
 
 ---
 
+## Individualisierung / Effizienz
+In Main.py können der Lese und Speicherort direkt hard-codiert werden, wodurch man die Ordner nicht mehr manuell ausgewählt werden müssen.
+    folder_path = data_folder or "/Users/noah/LRZ Sync+Share/MA/ZHS Messungen/Tests/erste Messungen"
+    save_folder = gui_save_folder or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
+Hier einfach den text zwischen "" mit dem gewünschten Pfade erstzen.
+
 ## 📬 Kontakt
 
 Bei Fragen oder Feedback gerne melden:  
