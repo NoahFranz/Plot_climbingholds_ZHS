@@ -1,7 +1,13 @@
-venv_plot/
+# Virtuelle Umgebungen
+venv*/
+*.env
+
+# PyInstaller output
+build/
+dist/
+*.spec
 __pycache__/
 *.pyc
+
+# macOS
 .DS_Store
-*.lvm
-*.csv
-*.npy

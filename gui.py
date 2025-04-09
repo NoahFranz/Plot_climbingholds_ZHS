@@ -231,6 +231,7 @@ def run_gui():
     # OK-Button
     def submit():
         root.quit()
+        root.destroy()
     submit_button = tk.Button(root, text="OK", command=submit)
     submit_button.pack(pady=20)
     
