@@ -1,5 +1,8 @@
 # Plotting_ZHS
 
+Falls du noch keine Erfahrung mit VS Code und Git hast, lese bitte das Beginner README
+https://github.com/NoahFranz/Plotting_ZHS/blob/main/BEGINNER_README.md
+
 Ein interaktives Python-Tool zur Verarbeitung und Visualisierung der Klettergriffmessdaten (.lvm) am ZHS der TUM .lvm-Messdaten (ZHS).
 
 ## 🔍 Funktionen
