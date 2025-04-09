@@ -8,7 +8,7 @@ Ein interaktives Python-Tool zur Verarbeitung und Visualisierung der Klettergrif
 - 🧲 Separater oder kombinierter Plot von Griff 1 (Rechts) (G1R) und Griff 2 (Links) (G2L)
 - 🧹 Optionale Glättung mit Savitzky-Golay-Filter
 - 💾 Speichern der Plots mit individuellem Dateinamen und Ausgabeordner
-- 🧠 Unterstützt dynamisch mehrere .lvm-Dateien mit automatischer Gruppierung
+- 🧠 Unterstützt mehrere .lvm-Dateien mit automatischer Gruppierung
 
 ## 🖥️ Bedienung
 
