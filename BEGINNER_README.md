@@ -48,7 +48,7 @@ Nachdem Git installiert ist, musst du das Projekt von GitHub herunterladen. Folg
 Eine virtuelle Umgebung hilft dir, das Projekt ohne Konflikte mit anderen Programmen oder Versionen zu nutzen.
 
 1. Gib diesen Befehl im Terminal ein, um eine virtuelle Umgebung zu erstellen:
-   ![Location to enter code for venv](./Screenshots/create_venv.png)
+   
    
    **Für macOS / Linux**:
    ```bash
@@ -61,6 +61,7 @@ Eine virtuelle Umgebung hilft dir, das Projekt ohne Konflikte mit anderen Progra
    python -m venv venv
    venv\Scripts\activate
    ```
+![Location to enter code for venv](./Screenshots/create_venv.png)
 
    Du solltest nun sehen, dass die virtuelle Umgebung aktiv ist (dies wird durch `(venv)` am Anfang deiner Terminalzeile angezeigt).
    ![Where to check for venv](./Screenshots/check_venv.png)
