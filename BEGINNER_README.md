@@ -71,9 +71,16 @@ Alle nötigen Pakete für das Projekt werden in einer Datei namens `requirements
 pip install -r requirements.txt
 ```
 
+
 ## 6. **Programm ausführen**
 
+Lade dir diese beispiel daten herunter:
+https://github.com/NoahFranz/Plotting_ZHS/tree/main/sample_data
+
+Füge Sie in einen Ordner ein, den du beim öffnen des programms dann auswählst.
+
 Jetzt bist du bereit, das Programm auszuführen! Gib einfach diesen Befehl ein:
+Lese am besten noch die andere README.md datei. https://github.com/NoahFranz/Plotting_ZHS/blob/main/README.md
 
 ```bash
 python main.py
