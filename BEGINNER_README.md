@@ -14,21 +14,23 @@ Diese Anleitung zeigt dir Schritt für Schritt, wie du das Projekt auf deinem Co
 
 Git ist ein Tool, mit dem du Code von GitHub herunterladen und speichern kannst. Folge diesen Schritten:
 
-- **Für Windows**: [Git für Windows herunterladen](https://git-scm.com/download/win) und installieren.
+- **Für Windows**: [Git für Windows herunterladen](https://git-scm.com/download/win) und installieren. (Meistens 64-bit Standalone)
 - **Für macOS**: [Git für macOS herunterladen](https://git-scm.com/download/mac) oder installiere Git mit Homebrew:
   ```bash
   brew install git
   ```
 
-Nach der Installation kannst du Git durch Eingabe von `git --version` im Terminal überprüfen, um sicherzustellen, dass es funktioniert.
+Nach der Installation kannst du Git durch Eingabe von `git --version` im Terminal überprüfen, um sicherzustellen, dass es funktioniert. Falls du Terminal noch nicht so wie unten siehst: 
+Öffnen über: Menü **Terminal > Neues Terminal**.
 
 ![Where to find Terminal](./Screenshots/VSCode_Terminal.png)
+![Where to find Terminal](./Screenshots/git_version.png)
 
 ## 3. **Projekt von GitHub herunterladen (Klonen)**
 
 Nachdem Git installiert ist, musst du das Projekt von GitHub herunterladen. Folge diesen Schritten:
 
-1. Öffne das **Terminal** in VS Code. Das geht über das Menü **Terminal > Neues Terminal**.
+1. Öffne das **Terminal** in VS Code. (FYI: Wenn irgendwo Bash steht, kannst du den darauf folgendend code immer im Terminal eingeben, Terminal ist der Ort, Bash eine Sprache)
 2. Gib den folgenden Befehl ein und drücke **Enter**:
 
     ```bash
@@ -77,7 +79,7 @@ pip install -r requirements.txt
 Lade dir diese beispiel daten herunter:
 https://github.com/NoahFranz/Plotting_ZHS/tree/main/sample_data
 
-Füge Sie in einen Ordner ein, den du beim öffnen des programms dann auswählst.
+Füge Sie in einen Ordner ein, den du dann später wenn das Fenster erscheint, auswählst.
 
 Jetzt bist du bereit, das Programm auszuführen! Gib einfach diesen Befehl ein:
 Lese am besten noch die andere README.md datei. https://github.com/NoahFranz/Plotting_ZHS/blob/main/README.md
