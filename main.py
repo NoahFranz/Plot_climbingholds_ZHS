@@ -9,7 +9,7 @@ def main():
     create_plots, save_plots, holds_to_plot, forces_to_plot, split_fmz_var, gui_save_folder, optional_suffix, data_folder, usefilteredDict, SVGwindowlength, SVGpolyorder = run_gui()
     print("forces_to_plot:", forces_to_plot, "holds to plot", holds_to_plot)
 
-    folder_path = data_folder or "/Users/noah/LRZ Sync+Share/MA/ZHS Messungen/Tests/erste Messungen"
+    folder_path = data_folder or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/Test tag 2"
     save_folder = gui_save_folder or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
     optional_suffix = optional_suffix or ""
 
