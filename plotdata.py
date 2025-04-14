@@ -81,7 +81,6 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
 
 
 
-
 # =================================== plot_data_per_hold ====================================
 
 
@@ -109,29 +108,11 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
     # Prüfe, ob ausschließlich der Momentenwert "Mz" ausgewählt wurde für jeden Griff
     only_mz_g1 = forces_g1 == ["Mz"]
     only_mz_g2 = forces_g2 == ["Mz"]
-    
-    # Verwende vorab berechnete Statistiken aus plot_dict["G2L"]["stats"] und ["G1R"]["stats"]
-    stats_g2 = plot_dict["G2L"]["stats"]
-    stats_g1 = plot_dict["G1R"]["stats"]
 
-    y_min = float("inf")
-    y_max = float("-inf")
+    # Lade globale Y-Grenzen
+    y_min_global = plot_dict["G2L"]["global_limits"]["global_y_min"] * margin if plot_dict["G2L"]["global_limits"]["global_y_min"] < 0 else plot_dict["G2L"]["global_limits"]["global_y_min"] / margin
+    y_max_global = plot_dict["G2L"]["global_limits"]["global_y_max"] * margin if plot_dict["G2L"]["global_limits"]["global_y_max"] > 0 else plot_dict["G2L"]["global_limits"]["global_y_max"] / margin
 
-    for key, val in stats_g2.items():
-        if "Mz" not in key and "FgR" not in key:
-            y_min = min(y_min, val["min"])
-            y_max = max(y_max, val["max"])
-
-    for key, val in stats_g1.items():
-        if "Mz" not in key and "FgR" not in key:
-            y_min = min(y_min, val["min"])
-            y_max = max(y_max, val["max"])
-
-    if y_min == float('inf') or y_max == float('-inf'):
-        y_min, y_max = 0, 600
-
-    y_min = y_min * margin if y_min < 0 else y_min / margin
-    y_max = y_max * margin if y_max > 0 else y_max / margin
 
     # Überprüfe, ob für einen Griff überhaupt Kräfte vorhanden sind (um Achsen zu bestimmen)
     has_g1 = bool(forces_g1)
@@ -142,6 +123,15 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
     fig_height = 4 * num_axes
     fig, axes = plt.subplots(num_axes, 1, figsize=(6.3, fig_height), sharex=True)
     axes = [axes] if num_axes == 1 else axes
+
+    # # Berechne das größte y_max und y_min für beide Subplots
+    # max_y_value = max(y_max, y_max_g1)
+    # min_y_value = min(y_min, y_min_g1)
+
+    # Setze die Achsenlimits für beide Subplots
+    axes[0].set_ylim([y_min_global, y_max_global])
+    if has_g1:
+        axes[1].set_ylim([y_min_global, y_max_global])
 
     # ----- Linker Griff (G2L) -----
     if only_mz_g2:
@@ -157,11 +147,11 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         # Plotte die normalen Kräfte (außer Mz) auf dem oberen Plot
         ax_left = axes[0]
         time_left = plot_dict["G2L"]["data"]["Time [s]"]
-        normal_y_min, normal_y_max = plot_normal_forces(ax_left, plot_dict["G2L"]["data"], forces_g2, color_mapping)
+        plot_normal_forces(ax_left, plot_dict["G2L"]["data"], forces_g2, color_mapping)
         ax_left.set_title("GL")
         ax_left.set_ylabel("F [N]")
-        ax_left.set_ylim([y_min, y_max + 0.25 * abs(y_max)])
-        # Falls Mz ebenfalls aktiv ist, erstelle eine Sekundärachse und plotte Mz
+        ax_left.set_ylim([y_min_global, y_max_global])
+        # Falls Mz ebenfalls aktiv ist, erstelle eine Sekundäxe und plotte Mz
         mz_cols = [col for col in plot_dict["G2L"]["data"].columns if "Mz" in col]
         sec_ax_left = None
         if mz_cols and "Mz" in forces_g2:
@@ -184,11 +174,11 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
             # Plotte normale Kräfte (außer Mz) für den rechten Griff
             ax_right = axes[1]
             time_right = plot_dict["G1R"]["data"]["Time [s]"]
-            y_min_g1, y_max_g1 = plot_normal_forces(ax_right, plot_dict["G1R"]["data"], forces_g1, color_mapping)
+            plot_normal_forces(ax_right, plot_dict["G1R"]["data"], forces_g1, color_mapping)
             ax_right.set_title("GR")
             ax_right.set_xlabel("Time [s]")
             ax_right.set_ylabel("F [N]")
-            ax_right.set_ylim([y_min_g1, y_max_g1 + 0.25 * abs(y_max_g1)])
+            ax_right.set_ylim([y_min_global, y_max_global])
             # Falls Mz aktiv ist, plotte zusätzlich Mz auf einer Sekundärachse
             mz_cols = [col for col in plot_dict["G1R"]["data"].columns if "Mz" in col]
             sec_ax_right = None

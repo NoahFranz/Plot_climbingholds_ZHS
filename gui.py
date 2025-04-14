@@ -60,8 +60,8 @@ def run_gui():
 
 
     # Option zur Trennung von Normalkräften und Moment in getrennten Plots
-    split_fmz_var = tk.BooleanVar(value=True)
-    split_fmz_checkbox = tk.Checkbutton(root, text="Normalkräfte und Moment in separaten Plots? (oben: F, unten: Mz)", variable=split_fmz_var)
+    split_fmz_var = tk.BooleanVar(value=False)
+    split_fmz_checkbox = tk.Checkbutton(root, text="Normalkräfte und Moment in separaten Plots? (oben: F, unten: Mz: Falls Nein: GL oben, GR unten)", variable=split_fmz_var)
     split_fmz_checkbox.pack(pady=10)
     
     # Eingabe für Datenordner (für LVM-Dateien)

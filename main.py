@@ -1,6 +1,6 @@
 from gui import*
 from loadData import load_lvm_data
-from utils import clean_data, split_data, get_min_max_values_per_column
+from utils import compute_global_ylimits_for_plots
 from plotdata import *
 import os
 
@@ -22,19 +22,37 @@ def main():
         current_dict = sorted_data_dict
         optional_suffix += "_raw"
 
-    for key in current_dict:
-        print(f"{key} →")
-        for side, content in current_dict[key].items():
-            print(f"  {side}: {list(content.keys())}")
-            print(f"    Spalten: {content['data'].columns.tolist()}")
+
 
     print("------------------ current_dict in main end ------------------")
     if current_dict is None:
         print("Keine .lvm-Dateien gefunden.")
         return
+    for key in current_dict:
+        print("Current_dict BEFORE: global y_limits")
+        print(f"{key} →")
+        for side, content in current_dict[key].items():
+            print(f"  {side}: {list(content.keys())}")
+            print(f"    Spalten: {content['data'].columns.tolist()}")
 
     forces_g1 = [k for k, v in forces_to_plot["G1"].items() if k != "all" and v]
     forces_g2 = [k for k, v in forces_to_plot["G2"].items() if k != "all" and v]
+
+    # compute globale limits for y_limits and save it with every Hold such that every dataframe can access it
+    for filename, file_data in current_dict.items():
+        current_dict[filename] = compute_global_ylimits_for_plots(file_data, forces_g1, forces_g2)
+    for key in current_dict:
+        print("Current_dict AFTER: global y_limits")
+        print(f"{key} →")
+        for side, content in current_dict[key].items():
+            print(f"  {side}: {list(content.keys())}")
+            print(f"    Spalten: {content['data'].columns.tolist()}")
+                # global_limits anzeigen, falls vorhanden
+            if "global_limits" in content:
+                gl = content["global_limits"]
+                print(f"    global_limits: min={gl['global_y_min']:.2f}, max={gl['global_y_max']:.2f}")
+            else:
+                print("    global_limits: Nicht gesetzt")
 
     if create_plots:
         if not split_fmz_var:

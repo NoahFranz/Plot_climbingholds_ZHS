@@ -58,7 +58,7 @@ def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle=
         # Einzelne Subplot-Titel und Suptitle entfernen, falls gespeichert wird
         for ax in fig.get_axes():
             ax.set_title("")
-        fig._suptitle = None
+        
         plt.tight_layout()
         import os
         full_path = os.path.join(save_folder, safe_name)
@@ -66,6 +66,7 @@ def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle=
         print(f"Plot gespeichert unter: {full_path}")
     else:
         fig.suptitle(safe_name, fontsize=14)
+        fig._suptitle = safe_name
         plt.tight_layout()
 
 def plot_normal_forces(ax, hold_data, forces, color_mapping):
@@ -84,11 +85,9 @@ def plot_normal_forces(ax, hold_data, forces, color_mapping):
         for col in cols:
             label = clean_label(col)
             ax.plot(time_data, hold_data[col], label=label, color=color_mapping.get(force, None))
-            local_min = hold_data[col].min()
-            local_max = hold_data[col].max()
-            y_min = min(y_min, local_min)
-            y_max = max(y_max, local_max)
-    return y_min, y_max
+
+
+    
 
 def plot_mz_on_secondary_axis(ax, time, data, mz_cols):
     # Bestimme die minimalen und maximalen Werte für Mz aus den angegebenen Spalten

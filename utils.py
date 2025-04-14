@@ -9,7 +9,7 @@ def clean_data(df):
 
 def get_min_max_values(df):
     """
-    Bestimmt den globalen minimalen und maximalen Wert (außer 'Time [s]') aus dem DataFrame.
+    Bestimmt den  minimalen und maximalen Wert eines datasets (außer 'Time [s]') aus dem DataFrame.
     """
     numeric_cols = [col for col in df.columns if col != "Time [s]"]
     min_val = df[numeric_cols].min().min()
@@ -37,3 +37,38 @@ def get_min_max_values_per_column(df):
         }
         for col in df.columns if col != "Time [s]"
     }
+
+def compute_global_ylimits_for_plots(plot_dict, forces_g1, forces_g2, margin=1.2):
+    """
+    Berechnet die globalen y-Achsen-Grenzen für beide Griffe (G2L und G1R)
+    und fügt diese als 'global_limits' zum plot_dict hinzu.
+    Es wird das extremste y_max und das kleinste y_min beider Griffe verwendet.
+    """
+    global_limits = {}
+
+    # Initialisiere max/min für G1 und G2 mit extremen Werten
+    cols_g2 = [col for col in plot_dict["G2L"]["data"].columns if any(force in col for force in forces_g2)]
+    min_g2 = plot_dict["G2L"]["data"][cols_g2].min().min()
+    max_g2 = plot_dict["G2L"]["data"][cols_g2].max().max()
+
+    cols_g1 = [col for col in plot_dict["G1R"]["data"].columns if any(force in col for force in forces_g1)]
+    min_g1 = plot_dict["G1R"]["data"][cols_g1].min().min()
+    max_g1 = plot_dict["G1R"]["data"][cols_g1].max().max()
+
+    y_min = min(min_g1, min_g2)
+    y_max = max(max_g1, max_g2)
+
+    # Berechne das globale y_max und y_min (mit Sicherheitsmarge)
+    global_y_max = y_max
+    global_y_min = y_min
+
+    # Speichern der globalen Limits in global_limits
+    global_limits["global_y_min"] = global_y_min
+    global_limits["global_y_max"] = global_y_max
+
+    # Füge die globalen Limits zum plot_dict hinzu
+    plot_dict["G1R"]["global_limits"] = global_limits
+    plot_dict["G2L"]["global_limits"] = global_limits
+
+    # Rückgabe des aktualisierten plot_dict
+    return plot_dict
