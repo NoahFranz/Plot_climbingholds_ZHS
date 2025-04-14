@@ -99,8 +99,8 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
     
     Anschließend werden die Legenden der primären und sekundären Achsen kombiniert.
     """
-    figstyle = "both_G_UL"
-    grip_label = "Left_right"
+    figstyle = "2G"
+    grip_label = "OL_UR"
 
     # Farbmapping für die Kräfte: Zuordnung von Kraftnamen zu Farben
     color_mapping = COLOR_MAPPING
