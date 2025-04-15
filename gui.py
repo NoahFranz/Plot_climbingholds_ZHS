@@ -180,8 +180,8 @@ def run_gui():
     kraefte_g1_frame.pack(side="left", padx=10, pady=10, fill="both")
     
     g1_Fy_var = tk.BooleanVar(value=True)
-    g1_Fx_var = tk.BooleanVar(value=True)
     g1_Fz_var = tk.BooleanVar(value=True)
+    g1_Fx_var = tk.BooleanVar(value=True)
     g1_Mz_var = tk.BooleanVar(value=True)
     g1_FgR_var = tk.BooleanVar(value=True)
     
@@ -200,15 +200,15 @@ def run_gui():
     
     g1_all_cb = tk.Checkbutton(kraefte_g1_frame, text="all", variable=g1_all_var, command=update_kraefte_g1)
     g1_Fy_cb = tk.Checkbutton(kraefte_g1_frame, text="Fy", variable=g1_Fy_var, command=update_kraft_g1_single)
-    g1_Fx_cb = tk.Checkbutton(kraefte_g1_frame, text="Fx", variable=g1_Fx_var, command=update_kraft_g1_single)
     g1_Fz_cb = tk.Checkbutton(kraefte_g1_frame, text="Fz", variable=g1_Fz_var, command=update_kraft_g1_single)
+    g1_Fx_cb = tk.Checkbutton(kraefte_g1_frame, text="Fx", variable=g1_Fx_var, command=update_kraft_g1_single)
     g1_Mz_cb = tk.Checkbutton(kraefte_g1_frame, text="Mz", variable=g1_Mz_var, command=update_kraft_g1_single)
     g1_FgR_cb = tk.Checkbutton(kraefte_g1_frame, text="FgR", variable=g1_FgR_var, command=update_kraft_g1_single)
     
     g1_all_cb.pack(anchor="w")
     g1_Fy_cb.pack(anchor="w")
-    g1_Fx_cb.pack(anchor="w")
     g1_Fz_cb.pack(anchor="w")
+    g1_Fx_cb.pack(anchor="w")
     g1_Mz_cb.pack(anchor="w")
     g1_FgR_cb.pack(anchor="w")
     
@@ -219,15 +219,16 @@ def run_gui():
     g2_all_var = tk.BooleanVar(value=True)
     
     g2_Fy_var = tk.BooleanVar(value=True)
-    g2_Fx_var = tk.BooleanVar(value=True)
     g2_Fz_var = tk.BooleanVar(value=True)
+    g2_Fx_var = tk.BooleanVar(value=True)
     g2_Mz_var = tk.BooleanVar(value=True)
-    g2_FgR_var = tk.BooleanVar(value=True)
+    g2_FgR_var = tk.BooleanVar(value=True)    
+
 
     def update_kraefte_g2():
         g2_Fy_var.set(g2_all_var.get())
-        g2_Fx_var.set(g2_all_var.get())
         g2_Fz_var.set(g2_all_var.get())
+        g2_Fx_var.set(g2_all_var.get()) 
         g2_Mz_var.set(g2_all_var.get())
         g2_FgR_var.set(g2_all_var.get())
     
@@ -239,17 +240,18 @@ def run_gui():
     
     g2_all_cb = tk.Checkbutton(kraefte_g2_frame, text="all", variable=g2_all_var, command=update_kraefte_g2)
     g2_Fy_cb = tk.Checkbutton(kraefte_g2_frame, text="Fy", variable=g2_Fy_var, command=update_kraft_g2_single)
-    g2_Fx_cb = tk.Checkbutton(kraefte_g2_frame, text="Fx", variable=g2_Fx_var, command=update_kraft_g2_single)
     g2_Fz_cb = tk.Checkbutton(kraefte_g2_frame, text="Fz", variable=g2_Fz_var, command=update_kraft_g2_single)
+    g2_Fx_cb = tk.Checkbutton(kraefte_g2_frame, text="Fx", variable=g2_Fx_var, command=update_kraft_g2_single)  
     g2_Mz_cb = tk.Checkbutton(kraefte_g2_frame, text="Mz", variable=g2_Mz_var, command=update_kraft_g2_single)
     g2_FgR_cb = tk.Checkbutton(kraefte_g2_frame, text="FgR", variable=g2_FgR_var, command=update_kraft_g2_single)
     
     g2_all_cb.pack(anchor="w")
     g2_Fy_cb.pack(anchor="w")
-    g2_Fx_cb.pack(anchor="w")
     g2_Fz_cb.pack(anchor="w")
+    g2_Fx_cb.pack(anchor="w")
     g2_Mz_cb.pack(anchor="w")
-    g2_FgR_cb.pack(anchor="w")
+    g2_FgR_cb.pack(anchor="w")    
+
     
     update_griff_all()
 
