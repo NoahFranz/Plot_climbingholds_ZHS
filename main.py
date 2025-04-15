@@ -25,11 +25,16 @@ def main():
         current_dict = sorted_data_dict
         optional_suffix += "_raw"
 
-    print("------------------ current_dict in main end ------------------")
     if current_dict is None:
         print("Keine .lvm-Dateien gefunden.")
         return
-
+    if cutoff["start"] > 0 or cutoff["end"] > 0:
+        for filename, file_data in current_dict.items():
+            for side in ["G1R", "G2L"]:
+                if side in file_data:
+                    df = file_data[side]["data"]
+                    trimmed_df = trim_dataframe_by_time(df, start_seconds=cutoff["start"], end_seconds=cutoff["end"])
+                    current_dict[filename][side]["data"] = trimmed_df
 
     forces_g1 = [k for k, v in forces_to_plot["G1"].items() if k != "all" and v]
     forces_g2 = [k for k, v in forces_to_plot["G2"].items() if k != "all" and v]

@@ -91,3 +91,27 @@ def get_force_suffix(forces_to_plot):
     else:
         sorted_forces = sorted(selected_forces)
         return "_only_" + "_".join(sorted_forces)
+
+def trim_dataframe_by_time(df, start_seconds, end_seconds):
+    """
+    Schneidet einen DataFrame anhand der Zeitspalte 'Time [s]' vorne und hinten zu.
+    
+    Parameters:
+        df : pandas.DataFrame
+            Der zu trimmende DataFrame.
+        start_seconds : int
+            Anzahl der Sekunden, die vom Anfang abgeschnitten werden.
+        end_seconds : int
+            Anzahl der Sekunden, die vom Ende abgeschnitten werden.
+    
+    Returns:
+        df : pandas.DataFrame
+            Der getrimmte DataFrame.
+    """
+    if "Time [s]" not in df.columns:
+        return df  # keine Zeitspalte vorhanden
+
+    t_min = df["Time [s]"].min() + start_seconds
+    t_max = df["Time [s]"].max() - end_seconds
+
+    return df[(df["Time [s]"] >= t_min) & (df["Time [s]"] <= t_max)].reset_index(drop=True)
