@@ -20,7 +20,7 @@ def main():
 
     if filter_settings["use_filter"]:
         current_dict = filtered_data_dict
-        optional_suffix += "_filtered_" + str(filter_settings["window_length"]) + "_" + str(filter_settings["polyorder"])
+        optional_suffix += "_filtered_with-" + str(filter_settings["window_length"]) + "-" + str(filter_settings["polyorder"])
     else:
         current_dict = sorted_data_dict
         optional_suffix += "_raw"
