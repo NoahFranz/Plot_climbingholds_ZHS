@@ -56,8 +56,8 @@ def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle=
     if save_plot:
         print("saving plots as png")
         # Einzelne Subplot-Titel und Suptitle entfernen, falls gespeichert wird
-        for ax in fig.get_axes():
-            ax.set_title("")
+        #for ax in fig.get_axes():
+        #    ax.set_title("")
         
         plt.tight_layout()
         import os

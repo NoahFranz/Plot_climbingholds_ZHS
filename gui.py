@@ -15,54 +15,96 @@ def run_gui():
     """
     root = tk.Tk()
     root.title("Optionen wählen")
-    root.geometry("500x1000")
+    root.geometry("700x1300")
     
     # Fenster zentrieren
-    window_width = 500
-    window_height = 1000
+    window_width = 700
+    window_height = 1300
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
     position_top = int(screen_height/2 - window_height/2)
     position_right = int(screen_width/2 - window_width/2)
     root.geometry(f"{window_width}x{window_height}+{position_right}+{position_top}")
     
+    # Frame für Plot-Optionen
+    plot_options_frame = tk.Frame(root)
+    plot_options_frame.pack(side="top", fill="x")
+
     # Option zum Speichern der Plots
     save_plots_var = tk.BooleanVar(value=False)
-    save_plots_checkbox = tk.Checkbutton(root, text="Plots speichern", variable=save_plots_var)
-    save_plots_checkbox.pack(pady=10)
+    save_plots_checkbox = tk.Checkbutton(plot_options_frame, text="Plots speichern", variable=save_plots_var)
+    save_plots_checkbox.pack(side="left", padx=10, pady=10)
 
     # Option zum Erstellen der Plots
     create_plots_var = tk.BooleanVar(value=True)
-    create_plots_checkbox = tk.Checkbutton(root, text="Plots erstellen", variable=create_plots_var)
-    create_plots_checkbox.pack(pady=10)
+    create_plots_checkbox = tk.Checkbutton(plot_options_frame, text="Plots erstellen", variable=create_plots_var)
+    create_plots_checkbox.pack(side="left", padx=10, pady=10)
    
-   
+    # Option zur Trennung von Normalkräften und Moment in getrennten Plots
+    split_fmz_var = tk.BooleanVar(value=False)
+    split_fmz_checkbox = tk.Checkbutton(root, text="Normalkräfte und Moment in separaten Plots? (oben: F, unten: Mz: Falls Nein: GL oben, GR unten)", variable=split_fmz_var)
+    split_fmz_checkbox.pack(pady=10)
+
+    # Option zum Vergleichen von Kräften pro Griff
+    compare_forces_var = tk.BooleanVar(value=False)
+    compare_forces_checkbox = tk.Checkbutton(root, text="Kräfte pro Griff vergleichen?", variable=compare_forces_var)
+    compare_forces_checkbox.pack(pady=10)
+
+    # Option zum Trimmen der Plots
+    trim_plot_var = tk.BooleanVar(value=False)
+    trim_plot_checkbox = tk.Checkbutton(root, text="Plot trimmen?", variable=trim_plot_var, command=toggle_trim_options)
+    trim_plot_checkbox.pack(pady=10)
+
+    # Collapsible Frame für Trim-Optionen
+    trim_frame = tk.LabelFrame(root, text="Trim-Optionen")
+    
+    cutoff_start_var = tk.IntVar(value=0)
+    cutoff_end_var = tk.IntVar(value=0)
+
+    tk.Label(trim_frame, text="Von Start (s):").pack(anchor="w", padx=5)
+    cutoff_start_entry = tk.Entry(trim_frame, textvariable=cutoff_start_var)
+    cutoff_start_entry.pack(fill="x", padx=5)
+
+    tk.Label(trim_frame, text="Von Ende (s):").pack(anchor="w", padx=5)
+    cutoff_end_entry = tk.Entry(trim_frame, textvariable=cutoff_end_var)
+    cutoff_end_entry.pack(fill="x", padx=5)
+
+    def toggle_trim_options():
+        if trim_plot_var.get():
+            trim_frame.pack(pady=5, padx=10, fill="x")
+        else:
+            trim_frame.pack_forget()
+
     # Option zur verwendung des Savatzgi-Goolay filters
     use_SVG_filter_var = tk.BooleanVar(value=True)
     use_SVG_filter_checkbox = tk.Checkbutton(root, text="Savatzgi-golay filter verwenden?", variable=use_SVG_filter_var)
     use_SVG_filter_checkbox.pack(pady=10)
 
-    # Fensterlänge und Polynomgrad für Savitzky-Golay
-    svg_frame = tk.LabelFrame(root, text="Savitzky-Golay Optionen")
-    svg_frame.pack(pady=5, padx=10, fill="x")
+    # Collapsible Frame für Savitzky-Golay Optionen
+    svg_options_frame = tk.LabelFrame(root, text="Savitzky-Golay Optionen")
+    svg_options_frame.pack(pady=5, padx=10, fill="x")
 
     window_length_var = tk.IntVar(value=11)
     polyorder_var = tk.IntVar(value=5)
 
-    tk.Label(svg_frame, text="Fensterlänge:").pack(anchor="w", padx=5)
-    window_length_entry = tk.Entry(svg_frame, textvariable=window_length_var)
+    tk.Label(svg_options_frame, text="Fensterlänge:").pack(anchor="w", padx=5)
+    window_length_entry = tk.Entry(svg_options_frame, textvariable=window_length_var)
     window_length_entry.pack(fill="x", padx=5)
 
-    tk.Label(svg_frame, text="Polynomgrad:").pack(anchor="w", padx=5)
-    polyorder_entry = tk.Entry(svg_frame, textvariable=polyorder_var)
+    tk.Label(svg_options_frame, text="Polynomgrad:").pack(anchor="w", padx=5)
+    polyorder_entry = tk.Entry(svg_options_frame, textvariable=polyorder_var)
     polyorder_entry.pack(fill="x", padx=5)
 
+    svg_options_visible = True
 
+    def toggle_svg_options():
+        nonlocal svg_options_visible
+        svg_options_visible = not svg_options_visible
+        svg_options_frame.pack_forget() if not svg_options_visible else svg_options_frame.pack(pady=5, padx=10, fill="x")
 
-    # Option zur Trennung von Normalkräften und Moment in getrennten Plots
-    split_fmz_var = tk.BooleanVar(value=False)
-    split_fmz_checkbox = tk.Checkbutton(root, text="Normalkräfte und Moment in separaten Plots? (oben: F, unten: Mz: Falls Nein: GL oben, GR unten)", variable=split_fmz_var)
-    split_fmz_checkbox.pack(pady=10)
+    svg_toggle_button = tk.Button(root, text="Savitzky-Golay Optionen anzeigen/ausblenden", command=toggle_svg_options)
+    svg_toggle_button.pack(pady=10)
+    toggle_svg_options()
     
     # Eingabe für Datenordner (für LVM-Dateien)
     data_folder_frame = tk.LabelFrame(root, text="Datenordner (für LVM-Dateien)")
@@ -224,9 +266,24 @@ def run_gui():
             g2_Fz_var.set(True)
             g2_Mz_var.set(True)
 
+    # Neue Variable und Funktion für Dateipfad-Optionen
+    paths_options_visible = True
 
+    def toggle_paths_options():
+        nonlocal paths_options_visible
+        paths_options_visible = not paths_options_visible
+        if paths_options_visible:
+            data_folder_frame.pack(pady=5, padx=10, fill="x")
+            save_folder_frame.pack(pady=5, padx=10, fill="x")
+            suffix_frame.pack(pady=5, padx=10, fill="x")
+        else:
+            data_folder_frame.pack_forget()
+            save_folder_frame.pack_forget()
+            suffix_frame.pack_forget()
 
-
+    paths_toggle_button = tk.Button(root, text="Dateipfad-Optionen anzeigen/ausblenden", command=toggle_paths_options)
+    paths_toggle_button.pack(pady=10)
+    toggle_paths_options()
 
     # OK-Button
     def submit():
@@ -260,4 +317,4 @@ def run_gui():
         }
     }
     
-    return create_plots_var.get(), save_plots_var.get(), griff_options, kraefte_options, split_fmz_var.get(), save_folder_var.get(), suffix_var.get(), data_folder_var.get(), use_SVG_filter_var.get(), window_length_var.get(), polyorder_var.get()
+    return create_plots_var.get(), save_plots_var.get(), griff_options, kraefte_options, split_fmz_var.get(), save_folder_var.get(), suffix_var.get(), data_folder_var.get(), use_SVG_filter_var.get(), window_length_var.get(), polyorder_var.get(), compare_forces_var.get(), trim_plot_var.get(), cutoff_start_var.get(), cutoff_end_var.get()

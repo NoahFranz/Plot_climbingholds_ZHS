@@ -2,15 +2,17 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import math
 from plotUITLS import*
+from matplotlib.colors import to_rgb
+
+def adjust_color(color, shift=0.2):
+    r, g, b = to_rgb(color)
+    r = max(0, min(1, r - shift))
+    g = max(0, min(1, g + shift / 2))
+    b = max(0, min(1, b + shift))
+    return (r, g, b)
 
 DEFAULT_FIGSIZE = (6.3, 8)
 COLOR_MAPPING = {"Fy": "blue","Fx": "green", "Fz": "orange", "Mz": "#8B1A1A"}  # Kaminrot
-# COLOR_MAPPING = {
-    # "Fx": "#3498db",  # Blue
-    # "Fy": "#e74c3c",  # Red
-    # "Fz": "#2ecc71",  # Green
-    # "Mz": "#9b59b6"   # Purple
-# }
 
 def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", save_plot=False, margin=1.25, save_folder="."):
     """
@@ -50,8 +52,8 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
     
     # --- Oberer Subplot: Normalkräfte ---
     for col in normal_cols:
-        force = next((f for f in COLOR_MAPPING if f in col), None)
-        ax_top.plot(time, hold_data[col], label=clean_label(col), color=COLOR_MAPPING.get(force))
+        curret_forcen = next((f for f in COLOR_MAPPING if f in col), None)
+        ax_top.plot(time, hold_data[col], label=clean_label(col), color=COLOR_MAPPING.get(curret_forcen))
     ax_top.set_title(f"Kräfte – {grip_label}")
     ax_top.set_ylabel("F [N]")
     if normal_cols:
@@ -78,15 +80,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
     if save_plot:
         save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
 
-
-
-
 # =================================== plot_data_per_hold ====================================
-
-
-
-
-
 
 def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=False, margin=1.2, save_folder="."):
     """
@@ -113,7 +107,6 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
     y_min_global = plot_dict["G2L"]["global_limits"]["global_y_min"] * margin if plot_dict["G2L"]["global_limits"]["global_y_min"] < 0 else plot_dict["G2L"]["global_limits"]["global_y_min"] / margin
     y_max_global = plot_dict["G2L"]["global_limits"]["global_y_max"] * margin if plot_dict["G2L"]["global_limits"]["global_y_max"] > 0 else plot_dict["G2L"]["global_limits"]["global_y_max"] / margin
 
-
     # Überprüfe, ob für einen Griff überhaupt Kräfte vorhanden sind (um Achsen zu bestimmen)
     has_g1 = bool(forces_g1)
     has_g2 = bool(forces_g2)
@@ -123,10 +116,6 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
     fig_height = 4 * num_axes
     fig, axes = plt.subplots(num_axes, 1, figsize=(6.3, fig_height), sharex=True)
     axes = [axes] if num_axes == 1 else axes
-
-    # # Berechne das größte y_max und y_min für beide Subplots
-    # max_y_value = max(y_max, y_max_g1)
-    # min_y_value = min(y_min, y_min_g1)
 
     # Setze die Achsenlimits für beide Subplots
     axes[0].set_ylim([y_min_global, y_max_global])
@@ -200,3 +189,85 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
     if save_plot:
         save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
     # plt.show()
+
+def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, save_folder=".", save_plot=False, margin=1.2):
+    """
+    Erstellt Vergleichsplots für die ausgewählten Kräfte der beiden Griffe.
+    
+    Parameter:
+      file_dict : dict
+          Dictionary, das die Daten für G1R und G2L enthält.
+          G1R /G2L
+          G1R: ['data', 'stats', 'global_limits']
+            Spalten: ['Time [s]', 'Fy_1  [N]', 'Fx_1 [N]', 'Fz_1 [N]', 'Mz_1 [Nm]', 'FgR_1 [%]']
+          Analog für G2L
+      forces_g1 : list
+          Liste der ausgewählten Kräfte für den rechten Griff (G1R).
+      forces_g2 : list
+          Liste der ausgewählten Kräfte für den linken Griff (G2L).
+      filename : str
+          Der Name der Datei für die Speicherung des Plots.
+      save_folder : str
+          Der Ordner, in dem die Plots gespeichert werden sollen.
+      save_plot : bool
+          Wenn True, wird die erstellte Figure als PNG abgespeichert.
+    """
+    time = file_dict["G1R"]["data"]["Time [s]"]
+    holdNameList = {"G1R", "G2L"}
+
+    # Liste mit den darzustellenden Kräften
+    allForcesList = []
+    for f in forces_g1 + forces_g2:
+        if f not in allForcesList:
+            allForcesList.append(f)
+
+    fig, (ax_top, ax_bottom) = plt.subplots(2, 1, figsize=(6.3, 8))
+    axFlag = 0
+    print("allForcesList in plot_Selected_force:", allForcesList)
+    for current_force in allForcesList:
+        for current_hold in holdNameList:
+            legend_suffix = {"G1R": "_R", "G2L": "_L"}.get(current_hold, "unknown")
+            curr_alpha = {"G1R": 1, "G2L": 0.5}.get(current_hold, 0.8)
+            if current_force == "Fy":
+                curr_color = "#1f77b4" if current_hold == "G1R" else "#17becf"
+            elif current_force == "Fz":
+                curr_color = "#ff7f0e" if current_hold == "G1R" else "#F79F0B"
+            else:
+                base_force = next((f for f in COLOR_MAPPING if f in current_force), None)
+                base_color = COLOR_MAPPING.get(base_force, "black")
+                curr_color = adjust_color(base_color, shift=0.15) if current_hold == "G2L" else base_color
+            matching_cols = [col for col in file_dict[current_hold]["data"].columns if current_force in col]
+            plot_force = file_dict[current_hold]["data"][matching_cols[0]]
+            if axFlag == 0:
+                ax_top.plot(time, plot_force, 
+                        label=clean_label(current_force)+legend_suffix, 
+                        color=curr_color, alpha = curr_alpha)
+            if axFlag == 1:
+                ax_bottom.plot(time, plot_force, 
+                    label=clean_label(current_force)+legend_suffix, 
+                    color=curr_color, alpha = curr_alpha)
+            else:
+                    print("all plots populated already, only 2 Forces are possible per plot")
+        axFlag = 1
+    
+    # equal limits for both forces
+    y_min_global = file_dict["G1R"]["global_limits"]["global_y_min"]*margin
+    y_max_global = file_dict["G1R"]["global_limits"]["global_y_max"]*margin
+
+    # Top plot axis
+    ax_top.set_title(f"Vergleich: {filename}")
+    ax_top.set_xlabel("Time [s]")
+    ax_top.set_ylabel("Kräfte [N]")
+    ax_top.set_ylim([y_min_global, y_max_global])
+    ax_top.legend(ncol=4)
+
+    # Bottom plot Axis
+    ax_bottom.set_xlabel("Time [s]")
+    ax_bottom.set_ylabel("Kräfte [N]")
+    ax_bottom.legend(ncol=4)
+    ax_bottom.set_ylim([y_min_global, y_max_global])
+    
+    apply_default_plot_style(fig=fig)
+    if save_plot:
+        plt.savefig(f"{save_folder}/{filename}.png")
+    plt.show()

@@ -6,7 +6,7 @@ import os
 
 
 def main():
-    create_plots, save_plots, holds_to_plot, forces_to_plot, split_fmz_var, gui_save_folder, optional_suffix, data_folder, usefilteredDict, SVGwindowlength, SVGpolyorder = run_gui()
+    create_plots, save_plots, holds_to_plot, forces_to_plot, split_fmz_var, gui_save_folder, optional_suffix, data_folder, usefilteredDict, SVGwindowlength, SVGpolyorder, compare_forces = run_gui()
     print("forces_to_plot:", forces_to_plot, "holds to plot", holds_to_plot)
 
     folder_path = data_folder or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/Test tag 2"
@@ -22,18 +22,11 @@ def main():
         current_dict = sorted_data_dict
         optional_suffix += "_raw"
 
-
-
     print("------------------ current_dict in main end ------------------")
     if current_dict is None:
         print("Keine .lvm-Dateien gefunden.")
         return
-    for key in current_dict:
-        print("Current_dict BEFORE: global y_limits")
-        print(f"{key} →")
-        for side, content in current_dict[key].items():
-            print(f"  {side}: {list(content.keys())}")
-            print(f"    Spalten: {content['data'].columns.tolist()}")
+
 
     forces_g1 = [k for k, v in forces_to_plot["G1"].items() if k != "all" and v]
     forces_g2 = [k for k, v in forces_to_plot["G2"].items() if k != "all" and v]
@@ -55,10 +48,13 @@ def main():
                 print("    global_limits: Nicht gesetzt")
 
     if create_plots:
-        if not split_fmz_var:
+        if not split_fmz_var and not compare_forces:
             for curr_filename, data_per_file in current_dict.items():
                 print(f"Plotting GL+GR: {curr_filename}")
                 plot_data_per_hold(data_per_file, forces_g1, forces_g2, curr_filename + optional_suffix, save_plot=save_plots, save_folder=save_folder)
+        elif not split_fmz_var and compare_forces:
+            for filename, file_data in current_dict.items():
+                plot_selected_forces_comparison(file_data, forces_g1, forces_g2, filename=filename, save_folder=save_folder, save_plot=save_plots)
         else:
             for curr_filename, data_per_file in current_dict.items():
                 if holds_to_plot["G2"]:
