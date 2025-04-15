@@ -72,3 +72,22 @@ def compute_global_ylimits_for_plots(plot_dict, forces_g1, forces_g2, margin=1.2
 
     # Rückgabe des aktualisierten plot_dict
     return plot_dict
+
+def get_force_suffix(forces_to_plot):
+    """
+    Erstellt einen Suffix-String basierend auf den ausgewählten Kräften.
+    Gibt '_all_' zurück, wenn alle Kräfte aktiv sind, sonst z.B. '_only_Fx_Fy'.
+    """
+    all_forces = {"Fx", "Fy", "Fz", "Mz", "FgR"}
+
+    selected_forces = set()
+    for side in ["G1", "G2"]:
+        for force, active in forces_to_plot.get(side, {}).items():
+            if force != "all" and active:
+                selected_forces.add(force)
+
+    if selected_forces == all_forces:
+        return "_all_"
+    else:
+        sorted_forces = sorted(selected_forces)
+        return "_only_" + "_".join(sorted_forces)

@@ -1,6 +1,6 @@
 from gui import*
 from loadData import load_lvm_data
-from utils import compute_global_ylimits_for_plots
+from utils import *
 from plotdata import *
 import os
 
@@ -13,6 +13,7 @@ def main():
     folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/Test tag 2"
     save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
     optional_suffix = file_paths["suffix"] or ""
+    optional_suffix = optional_suffix + get_force_suffix(forces_to_plot)
     cutoff = {"start": cutoff["start"], "end": cutoff["end"]}
 
     sorted_data_dict, filtered_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"])
