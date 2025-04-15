@@ -53,6 +53,8 @@ def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle=
     Wenn save_plot=True, wird die Figure als PNG gespeichert.
     """
     safe_name = f"{filename}_{grip_label}_{figstyle}_plot.png"
+    # Ersetze doppelte Unterstriche durch einfache
+    safe_name = safe_name.replace("__", "_")
     if save_plot:
         print("saving plots as png")
         # Einzelne Subplot-Titel und Suptitle entfernen, falls gespeichert wird
