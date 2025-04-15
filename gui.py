@@ -149,6 +149,8 @@ def run_gui():
     griff_g1_var = tk.BooleanVar(value=True)
     griff_g2_var = tk.BooleanVar(value=True)
 
+    g1_all_var = tk.BooleanVar(value=True)
+    
     def update_griff_all():
         griff_g1_var.set(griff_all_var.get())
         griff_g2_var.set(griff_all_var.get())
@@ -156,20 +158,10 @@ def run_gui():
     def update_griff_g1():
         if not griff_g1_var.get():
             griff_all_var.set(False)
-            g1_all_var.set(False)
-            g1_Fy_var.set(False)
-            g1_Fx_var.set(False)
-            g1_Fz_var.set(False)
-            g1_Mz_var.set(False)
 
     def update_griff_g2():
         if not griff_g2_var.get():
             griff_all_var.set(False)
-            g2_all_var.set(False)
-            g2_Fy_var.set(False)
-            g2_Fx_var.set(False)
-            g2_Fz_var.set(False)
-            g2_Mz_var.set(False)
     
     griff_all_cb = tk.Checkbutton(griff_frame, text="All", variable=griff_all_var, command=update_griff_all)
     griff_g1_cb = tk.Checkbutton(griff_frame, text="G1(rechts)", variable=griff_g1_var, command=update_griff_g1)
@@ -187,7 +179,6 @@ def run_gui():
     kraefte_g1_frame = tk.LabelFrame(kraefte_frame, text="G1")
     kraefte_g1_frame.pack(side="left", padx=10, pady=10, fill="both")
     
-    g1_all_var = tk.BooleanVar(value=True)
     g1_Fy_var = tk.BooleanVar(value=True)
     g1_Fx_var = tk.BooleanVar(value=True)
     g1_Fz_var = tk.BooleanVar(value=True)
@@ -226,6 +217,7 @@ def run_gui():
     kraefte_g2_frame.pack(side="right", padx=10, pady=10, fill="both")
     
     g2_all_var = tk.BooleanVar(value=True)
+    
     g2_Fy_var = tk.BooleanVar(value=True)
     g2_Fx_var = tk.BooleanVar(value=True)
     g2_Fz_var = tk.BooleanVar(value=True)
@@ -259,23 +251,7 @@ def run_gui():
     g2_Mz_cb.pack(anchor="w")
     g2_FgR_cb.pack(anchor="w")
     
-    if griff_all_var.get():
-            griff_g1_var.set(True)
-            griff_g2_var.set(True)
-
-    if g1_all_var.get():
-            g1_Fy_var.set(True)
-            g1_Fx_var.set(True)
-            g1_Fz_var.set(True)
-            g1_Mz_var.set(True)
-            g1_FgR_var.set(True)
-
-    if g2_all_var.get():
-            g2_Fy_var.set(True)
-            g2_Fx_var.set(True)
-            g2_Fz_var.set(True)
-            g2_Mz_var.set(True)
-            g2_FgR_var.set(True)
+    update_griff_all()
 
     # Neue Variable und Funktion für Dateipfad-Optionen
     paths_options_visible = True
@@ -302,6 +278,7 @@ def run_gui():
         root.destroy()
     submit_button = tk.Button(root, text="OK", command=submit)
     submit_button.pack(pady=20)
+    root.mainloop()
     
     # Rückgabewerte vorbereiten
     plot_settings = {
@@ -336,7 +313,6 @@ def run_gui():
     }
     kraefte_options = {
         "G1": {
-            "all": g1_all_var.get(),
             "Fy": g1_Fy_var.get(),
             "Fx": g1_Fx_var.get(),
             "Fz": g1_Fz_var.get(),
@@ -344,7 +320,6 @@ def run_gui():
             "FgR": g1_FgR_var.get()
         },
         "G2": {
-            "all": g2_all_var.get(),
             "Fy": g2_Fy_var.get(),
             "Fx": g2_Fx_var.get(),
             "Fz": g2_Fz_var.get(),
@@ -352,5 +327,5 @@ def run_gui():
             "FgR": g2_FgR_var.get()
         }
     }
-    root.mainloop()
+    
     return plot_settings, griff_options, kraefte_options, filter_settings, file_paths, cutoff
