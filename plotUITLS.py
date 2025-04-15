@@ -109,7 +109,7 @@ def plot_mz_on_secondary_axis(ax, time, data, mz_cols):
     ax.set_ylabel("Mz [Nm]")
     ax.set_ylim([-mz_range, mz_range])
 
-def combine_legends(ax, secondary_ax=None, loc="upper left", ncol=4):
+def combine_legends(ax, secondary_ax=None, loc="upper left", ncol=5):
     """
     Kombiniert die Legenden von ax und, falls vorhanden, secondary_ax.
     """

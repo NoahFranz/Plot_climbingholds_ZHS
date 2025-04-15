@@ -10,7 +10,7 @@ def adjust_color(color, shift=0.2):
     g = max(0, min(1, g + shift / 2))
     b = max(0, min(1, b + shift))
     return (r, g, b)
-
+NCOL = 5
 DEFAULT_FIGSIZE = (6.3, 8)
 COLOR_MAPPING = {"Fy": "blue","Fx": "green", "Fz": "orange", "Mz": "#8B1A1A", "FgR": "#9ACD32"}  # Kaminrot
 
@@ -65,7 +65,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
         data_subset = hold_data[normal_cols].dropna()
         ax_top.set_ylim(compute_ylimits(data_subset, margin=margin, fallback=(-100, 1000)))
     # Füge eine Legende hinzu (innerhalb des Plots)
-    ax_top.legend(loc="upper right", ncol=4)
+    ax_top.legend(loc="upper right", ncol=NCOL)
     
     # --- Unterer Subplot: Moment ---
     for col in moment_cols:
@@ -78,7 +78,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
         y_min, y_max = compute_ylimits(data_subset, margin=margin, fallback=(-10, 10))
         # Wenn beide Werte innerhalb ±7 liegen, setze feste Grenzen
         ax_bottom.set_ylim([y_min, y_max])
-    ax_bottom.legend(loc="upper right", ncol=4)
+    ax_bottom.legend(loc="upper right", ncol=NCOL)
     
     # Setze den eindeutigen Titel und speichere optional
     apply_default_plot_style(fig)
@@ -154,7 +154,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         plot_mz_on_secondary_axis(ax_left, time_left, plot_dict["G2L"]["data"], mz_cols)
         ax_left.set_ylabel("Mz [Nm]")
         # Hole und setze die Legende
-        combine_legends(ax_left, None, loc="upper left", ncol=4)
+        combine_legends(ax_left, None, loc="upper left", ncol=NCOL)
     else:
         # Plotte die normalen Kräfte (außer Mz) auf dem oberen Plot
         ax_left = axes[0]
@@ -170,7 +170,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
             sec_ax_left = ax_left.twinx()
             plot_mz_on_secondary_axis(sec_ax_left, time_left, plot_dict["G2L"]["data"], mz_cols)
         # Kombiniere Legenden von primärer und sekundärer Achse
-        combine_legends(ax_left, sec_ax_left, loc="upper left", ncol=4)
+        combine_legends(ax_left, sec_ax_left, loc="upper left", ncol=NCOL)
     
     # ----- Rechter Griff (G1R) -----
     if has_g1:
@@ -181,7 +181,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
             time_right = plot_dict["G1R"]["data"]["Time [s]"]
             plot_mz_on_secondary_axis(ax_right, time_right, plot_dict["G1R"]["data"], mz_cols)
             ax_right.set_ylabel("Mz [Nm]")
-            combine_legends(ax_right, None, loc="upper left", ncol=4)
+            combine_legends(ax_right, None, loc="upper left", ncol=NCOL)
         else:
             # Plotte normale Kräfte (außer Mz) für den rechten Griff
             ax_right = axes[1]
@@ -197,7 +197,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
             if mz_cols and "Mz" in forces_g1:
                 sec_ax_right = ax_right.twinx()
                 plot_mz_on_secondary_axis(sec_ax_right, time_right, plot_dict["G1R"]["data"], mz_cols)
-            combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=4)
+            combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=NCOL)
     
     # Dynamische Berechnung der Zeitachsen-Grenzen mit 10% Puffer
     time_min = min(time_left.min(), time_right.min()) if has_g1 else time_left.min()
@@ -286,12 +286,12 @@ def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, s
     ax_top.set_xlabel("Time [s]")
     ax_top.set_ylabel("Kräfte [N]")
     ax_top.set_ylim([y_min_global, y_max_global])
-    ax_top.legend(ncol=4)
+    ax_top.legend(ncol=NCOL)
 
     # Bottom plot Axis
     ax_bottom.set_xlabel("Time [s]")
     ax_bottom.set_ylabel("Kräfte [N]")
-    ax_bottom.legend(ncol=4)
+    ax_bottom.legend(ncol=NCOL)
     ax_bottom.set_ylim([y_min_global, y_max_global])
     
     apply_default_plot_style(fig=fig)
