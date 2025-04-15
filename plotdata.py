@@ -12,26 +12,31 @@ def adjust_color(color, shift=0.2):
     return (r, g, b)
 
 DEFAULT_FIGSIZE = (6.3, 8)
-COLOR_MAPPING = {"Fy": "blue","Fx": "green", "Fz": "orange", "Mz": "#8B1A1A"}  # Kaminrot
+COLOR_MAPPING = {"Fy": "blue","Fx": "green", "Fz": "orange", "Mz": "#8B1A1A", "FgR": "#9ACD32"}  # Kaminrot
 
-def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", save_plot=False, margin=1.25, save_folder="."):
+def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", save_plot=False, margin=1.25, save_folder=".", cutoff=None):
     """
     Erstellt eine Figure für einen einzelnen Griff, in der:
       - Im oberen Subplot die Normalkräfte (alle Spalten außer "Time [s]" und solchen, die "Mz" enthalten) geplottet werden.
       - Im unteren Subplot der Moment (alle Spalten, die "Mz" enthalten) geplottet wird.
     
-    Parameter:
+    Parameters:
       hold_data : pandas.DataFrame
-          DataFrame, das mindestens die Spalte "Time [s]" und 
-          weitere Kraftdaten (z.B. Fx, Fy, Fz) sowie Momentdaten ("Mz") enthält.
+          DataFrame mit Zeit- und Kraftdaten.
       forces : list
-          Liste der ausgewählten Kräfte.
+          Liste der auszuwertenden Kräfte.
       filename : str
-          Der Name der Datei für die Speicherung des Plots.
+          Dateiname für die Speicherung des Plots.
       grip_label : str
-          Bezeichnung des Griffs für den Titel.
+          Label des Griffs (z. B. G1R/G2L).
       save_plot : bool
-          Wenn True, wird die erstellte Figure als PNG abgespeichert.
+          Wenn True, wird der Plot gespeichert.
+      margin : float
+          Multiplikator zur Erweiterung der y-Achsen-Grenzen.
+      save_folder : str
+          Pfad zum Speicherordner.
+      cutoff : dict or None
+          Dictionary mit "start" und "end" in Sekunden für die Trimmung.
     
     Die Funktion erstellt eine Figure mit zwei Subplots (obere Zeile für Normalkräfte, untere Zeile für Moment),
     passt die Achsenbeschriftung und fügt jeweils eine Legende hinzu.
@@ -82,7 +87,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
 
 # =================================== plot_data_per_hold ====================================
 
-def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=False, margin=1.2, save_folder="."):
+def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=False, margin=1.2, save_folder=".", cutoff=None):
     """
     Erstellt eine Figure mit separaten Subplots für den linken (G2L) und rechten Griff (G1R).
     
@@ -92,6 +97,24 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         und falls Mz zusätzlich aktiv ist, auf einer Sekundärachse ergänzt.
     
     Anschließend werden die Legenden der primären und sekundären Achsen kombiniert.
+
+    Parameters:
+        plot_dict : dict
+            Dictionary mit Daten und Metadaten für G1R und G2L.
+        forces_g1 : list
+            Liste der auszuwertenden Kräfte für G1R.
+        forces_g2 : list
+            Liste der auszuwertenden Kräfte für G2L.
+        filename : str
+            Dateiname für die Speicherung des Plots.
+        save_plot : bool
+            Wenn True, wird der Plot gespeichert.
+        margin : float
+            Multiplikator zur Erweiterung der y-Achsen-Grenzen.
+        save_folder : str
+            Pfad zum Speicherordner.
+        cutoff : dict or None
+            Dictionary mit "start" und "end" in Sekunden für die Trimmung.
     """
     figstyle = "2G"
     grip_label = "OL_UR"
@@ -190,7 +213,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
     # plt.show()
 
-def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, save_folder=".", save_plot=False, margin=1.2):
+def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, save_folder=".", save_plot=False, margin=1.2, cutoff=None):
     """
     Erstellt Vergleichsplots für die ausgewählten Kräfte der beiden Griffe.
     
@@ -202,15 +225,19 @@ def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, s
             Spalten: ['Time [s]', 'Fy_1  [N]', 'Fx_1 [N]', 'Fz_1 [N]', 'Mz_1 [Nm]', 'FgR_1 [%]']
           Analog für G2L
       forces_g1 : list
-          Liste der ausgewählten Kräfte für den rechten Griff (G1R).
+          Liste der auszuwertenden Kräfte für G1R.
       forces_g2 : list
-          Liste der ausgewählten Kräfte für den linken Griff (G2L).
+          Liste der auszuwertenden Kräfte für G2L.
       filename : str
           Der Name der Datei für die Speicherung des Plots.
       save_folder : str
           Der Ordner, in dem die Plots gespeichert werden sollen.
       save_plot : bool
           Wenn True, wird die erstellte Figure als PNG abgespeichert.
+      margin : float
+          Multiplikator zur Erweiterung der y-Achsen-Grenzen.
+      cutoff : dict or None
+          Dictionary mit "start" und "end" in Sekunden für die Trimmung.
     """
     time = file_dict["G1R"]["data"]["Time [s]"]
     holdNameList = {"G1R", "G2L"}

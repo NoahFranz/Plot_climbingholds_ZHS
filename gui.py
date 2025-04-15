@@ -8,8 +8,8 @@ def run_gui():
       - Ob die Plots erstellt werden sollen
       - Griff-Optionen: All, G1, G2
       - Kräfte-Optionen:
-            Für G1: all, Fy, Fx, Fz, Mz
-            Für G2: all, Fy, Fx, Fz, Mz
+            Für G1: all, Fy, Fx, Fz, Mz, FgR
+            Für G2: all, Fy, Fx, Fz, Mz, FgR
     Rückgabe:
       (create_plots, save_plots, griff_options, kraefte_options)
     """
@@ -52,6 +52,13 @@ def run_gui():
 
     # Option zum Trimmen der Plots
     trim_plot_var = tk.BooleanVar(value=False)
+
+    def toggle_trim_options():
+        if trim_plot_var.get():
+            trim_frame.pack(pady=5, padx=10, fill="x")
+        else:
+            trim_frame.pack_forget()
+
     trim_plot_checkbox = tk.Checkbutton(root, text="Plot trimmen?", variable=trim_plot_var, command=toggle_trim_options)
     trim_plot_checkbox.pack(pady=10)
 
@@ -68,12 +75,6 @@ def run_gui():
     tk.Label(trim_frame, text="Von Ende (s):").pack(anchor="w", padx=5)
     cutoff_end_entry = tk.Entry(trim_frame, textvariable=cutoff_end_var)
     cutoff_end_entry.pack(fill="x", padx=5)
-
-    def toggle_trim_options():
-        if trim_plot_var.get():
-            trim_frame.pack(pady=5, padx=10, fill="x")
-        else:
-            trim_frame.pack_forget()
 
     # Option zur verwendung des Savatzgi-Goolay filters
     use_SVG_filter_var = tk.BooleanVar(value=True)
@@ -191,17 +192,19 @@ def run_gui():
     g1_Fx_var = tk.BooleanVar(value=True)
     g1_Fz_var = tk.BooleanVar(value=True)
     g1_Mz_var = tk.BooleanVar(value=True)
-
+    g1_FgR_var = tk.BooleanVar(value=True)
+    
     def update_kraefte_g1():
         g1_Fy_var.set(g1_all_var.get())
         g1_Fx_var.set(g1_all_var.get())
         g1_Fz_var.set(g1_all_var.get())
         g1_Mz_var.set(g1_all_var.get())
+        g1_FgR_var.set(g1_all_var.get())
     
     def update_kraft_g1_single():
-        if not all([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get()]):
+        if not all([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get()]):
             g1_all_var.set(False)
-        if any([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get()]):
+        if any([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get()]):
             griff_g1_var.set(True)
     
     g1_all_cb = tk.Checkbutton(kraefte_g1_frame, text="all", variable=g1_all_var, command=update_kraefte_g1)
@@ -209,12 +212,14 @@ def run_gui():
     g1_Fx_cb = tk.Checkbutton(kraefte_g1_frame, text="Fx", variable=g1_Fx_var, command=update_kraft_g1_single)
     g1_Fz_cb = tk.Checkbutton(kraefte_g1_frame, text="Fz", variable=g1_Fz_var, command=update_kraft_g1_single)
     g1_Mz_cb = tk.Checkbutton(kraefte_g1_frame, text="Mz", variable=g1_Mz_var, command=update_kraft_g1_single)
+    g1_FgR_cb = tk.Checkbutton(kraefte_g1_frame, text="FgR", variable=g1_FgR_var, command=update_kraft_g1_single)
     
     g1_all_cb.pack(anchor="w")
     g1_Fy_cb.pack(anchor="w")
     g1_Fx_cb.pack(anchor="w")
     g1_Fz_cb.pack(anchor="w")
     g1_Mz_cb.pack(anchor="w")
+    g1_FgR_cb.pack(anchor="w")
     
     # Für G2
     kraefte_g2_frame = tk.LabelFrame(kraefte_frame, text="G2")
@@ -225,17 +230,19 @@ def run_gui():
     g2_Fx_var = tk.BooleanVar(value=True)
     g2_Fz_var = tk.BooleanVar(value=True)
     g2_Mz_var = tk.BooleanVar(value=True)
+    g2_FgR_var = tk.BooleanVar(value=True)
 
     def update_kraefte_g2():
         g2_Fy_var.set(g2_all_var.get())
         g2_Fx_var.set(g2_all_var.get())
         g2_Fz_var.set(g2_all_var.get())
         g2_Mz_var.set(g2_all_var.get())
+        g2_FgR_var.set(g2_all_var.get())
     
     def update_kraft_g2_single():
-        if not all([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get()]):
+        if not all([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get()]):
             g2_all_var.set(False)
-        if any([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get()]):
+        if any([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get()]):
             griff_g2_var.set(True)
     
     g2_all_cb = tk.Checkbutton(kraefte_g2_frame, text="all", variable=g2_all_var, command=update_kraefte_g2)
@@ -243,12 +250,14 @@ def run_gui():
     g2_Fx_cb = tk.Checkbutton(kraefte_g2_frame, text="Fx", variable=g2_Fx_var, command=update_kraft_g2_single)
     g2_Fz_cb = tk.Checkbutton(kraefte_g2_frame, text="Fz", variable=g2_Fz_var, command=update_kraft_g2_single)
     g2_Mz_cb = tk.Checkbutton(kraefte_g2_frame, text="Mz", variable=g2_Mz_var, command=update_kraft_g2_single)
+    g2_FgR_cb = tk.Checkbutton(kraefte_g2_frame, text="FgR", variable=g2_FgR_var, command=update_kraft_g2_single)
     
     g2_all_cb.pack(anchor="w")
     g2_Fy_cb.pack(anchor="w")
     g2_Fx_cb.pack(anchor="w")
     g2_Fz_cb.pack(anchor="w")
     g2_Mz_cb.pack(anchor="w")
+    g2_FgR_cb.pack(anchor="w")
     
     if griff_all_var.get():
             griff_g1_var.set(True)
@@ -259,12 +268,14 @@ def run_gui():
             g1_Fx_var.set(True)
             g1_Fz_var.set(True)
             g1_Mz_var.set(True)
+            g1_FgR_var.set(True)
 
     if g2_all_var.get():
             g2_Fy_var.set(True)
             g2_Fx_var.set(True)
             g2_Fz_var.set(True)
             g2_Mz_var.set(True)
+            g2_FgR_var.set(True)
 
     # Neue Variable und Funktion für Dateipfad-Optionen
     paths_options_visible = True
@@ -292,9 +303,32 @@ def run_gui():
     submit_button = tk.Button(root, text="OK", command=submit)
     submit_button.pack(pady=20)
     
-    root.mainloop()
-    
     # Rückgabewerte vorbereiten
+    plot_settings = {
+        "create": create_plots_var.get(),
+        "save": save_plots_var.get(),
+        "split_fmz": split_fmz_var.get(),
+        "compare_forces": compare_forces_var.get(),
+    }
+
+    filter_settings = {
+        "use_filter": use_SVG_filter_var.get(),
+        "window_length": window_length_var.get(),
+        "polyorder": polyorder_var.get(),
+    }
+
+    file_paths = {
+        "save_folder": save_folder_var.get(),
+        "data_folder": data_folder_var.get(),
+        "suffix": suffix_var.get()
+    }
+
+    cutoff = {
+        "active": trim_plot_var.get(),
+        "start": cutoff_start_var.get(),
+        "end": cutoff_end_var.get()
+    }
+    
     griff_options = {
         "all": griff_all_var.get(),
         "G1": griff_g1_var.get(),
@@ -306,15 +340,17 @@ def run_gui():
             "Fy": g1_Fy_var.get(),
             "Fx": g1_Fx_var.get(),
             "Fz": g1_Fz_var.get(),
-            "Mz": g1_Mz_var.get()
+            "Mz": g1_Mz_var.get(),
+            "FgR": g1_FgR_var.get()
         },
         "G2": {
             "all": g2_all_var.get(),
             "Fy": g2_Fy_var.get(),
             "Fx": g2_Fx_var.get(),
             "Fz": g2_Fz_var.get(),
-            "Mz": g2_Mz_var.get()
+            "Mz": g2_Mz_var.get(),
+            "FgR": g2_FgR_var.get()
         }
     }
-    
-    return create_plots_var.get(), save_plots_var.get(), griff_options, kraefte_options, split_fmz_var.get(), save_folder_var.get(), suffix_var.get(), data_folder_var.get(), use_SVG_filter_var.get(), window_length_var.get(), polyorder_var.get(), compare_forces_var.get(), trim_plot_var.get(), cutoff_start_var.get(), cutoff_end_var.get()
+    root.mainloop()
+    return plot_settings, griff_options, kraefte_options, filter_settings, file_paths, cutoff

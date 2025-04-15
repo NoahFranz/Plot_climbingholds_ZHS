@@ -8,7 +8,7 @@ def clean_label(label):
     """
     Entfernt standardisierte Suffixe und Einheiten aus einem Spaltennamen.
     """
-    return label.replace("_1", "").replace("_2", "").replace("[N]", "").replace("[Nm]", "")
+    return label.replace("_1", "").replace("_2", "").replace("[N]", "").replace("[Nm]", "").replace("[%]", "")
 
 def compute_ylimits(data_subset, margin=1.2, fallback=(-100, 800)):
     """

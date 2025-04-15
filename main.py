@@ -6,18 +6,20 @@ import os
 
 
 def main():
-    create_plots, save_plots, holds_to_plot, forces_to_plot, split_fmz_var, gui_save_folder, optional_suffix, data_folder, usefilteredDict, SVGwindowlength, SVGpolyorder, compare_forces = run_gui()
+    plot_settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff = run_gui()
+    
     print("forces_to_plot:", forces_to_plot, "holds to plot", holds_to_plot)
 
-    folder_path = data_folder or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/Test tag 2"
-    save_folder = gui_save_folder or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
-    optional_suffix = optional_suffix or ""
+    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/Test tag 2"
+    save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
+    optional_suffix = file_paths["suffix"] or ""
+    cutoff = {"start": cutoff["start"], "end": cutoff["end"]}
 
-    sorted_data_dict, filtered_data_dict = load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder)
+    sorted_data_dict, filtered_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"])
 
-    if usefilteredDict:
+    if filter_settings["use_filter"]:
         current_dict = filtered_data_dict
-        optional_suffix += "_filtered_" + str(SVGwindowlength) + "_" + str(SVGpolyorder)
+        optional_suffix += "_filtered_" + str(filter_settings["window_length"]) + "_" + str(filter_settings["polyorder"])
     else:
         current_dict = sorted_data_dict
         optional_suffix += "_raw"
@@ -30,6 +32,8 @@ def main():
 
     forces_g1 = [k for k, v in forces_to_plot["G1"].items() if k != "all" and v]
     forces_g2 = [k for k, v in forces_to_plot["G2"].items() if k != "all" and v]
+
+    
 
     # compute globale limits for y_limits and save it with every Hold such that every dataframe can access it
     for filename, file_data in current_dict.items():
@@ -47,22 +51,22 @@ def main():
             else:
                 print("    global_limits: Nicht gesetzt")
 
-    if create_plots:
-        if not split_fmz_var and not compare_forces:
+    if plot_settings["create"]:
+        if not plot_settings["split_fmz"] and not plot_settings["compare_forces"]:
             for curr_filename, data_per_file in current_dict.items():
                 print(f"Plotting GL+GR: {curr_filename}")
-                plot_data_per_hold(data_per_file, forces_g1, forces_g2, curr_filename + optional_suffix, save_plot=save_plots, save_folder=save_folder)
-        elif not split_fmz_var and compare_forces:
+                plot_data_per_hold(data_per_file, forces_g1, forces_g2, curr_filename + optional_suffix, save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff)
+        elif not plot_settings["split_fmz"] and plot_settings["compare_forces"]:
             for filename, file_data in current_dict.items():
-                plot_selected_forces_comparison(file_data, forces_g1, forces_g2, filename=filename, save_folder=save_folder, save_plot=save_plots)
+                plot_selected_forces_comparison(file_data, forces_g1, forces_g2, filename=filename, save_folder=save_folder, save_plot=plot_settings["save"], cutoff=cutoff)
         else:
             for curr_filename, data_per_file in current_dict.items():
                 if holds_to_plot["G2"]:
                     print(f"Plotting G2L splitview: {curr_filename}")
-                    plot_single_hold_splitview(data_per_file["G2L"]["data"], forces_g2, curr_filename + optional_suffix, grip_label="GL", save_plot=save_plots, save_folder=save_folder)
+                    plot_single_hold_splitview(data_per_file["G2L"]["data"], forces_g2, curr_filename + optional_suffix, grip_label="GL", save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff)
                 if holds_to_plot["G1"]:
                     print(f"Plotting G1R splitview: {curr_filename}")
-                    plot_single_hold_splitview(data_per_file["G1R"]["data"], forces_g1, curr_filename + optional_suffix, grip_label="GR", save_plot=save_plots, save_folder=save_folder)
+                    plot_single_hold_splitview(data_per_file["G1R"]["data"], forces_g1, curr_filename + optional_suffix, grip_label="GR", save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff)
 
         plt.show()
 
