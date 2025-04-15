@@ -33,12 +33,12 @@ def run_gui():
     # Option zum Speichern der Plots
     save_plots_var = tk.BooleanVar(value=False)
     save_plots_checkbox = tk.Checkbutton(plot_options_frame, text="Plots speichern", variable=save_plots_var)
-    save_plots_checkbox.pack(side="left", padx=10, pady=10)
+    save_plots_checkbox.pack(side="top", padx=10, pady=10)
 
     # Option zum Erstellen der Plots
     create_plots_var = tk.BooleanVar(value=True)
     create_plots_checkbox = tk.Checkbutton(plot_options_frame, text="Plots erstellen", variable=create_plots_var)
-    create_plots_checkbox.pack(side="left", padx=10, pady=10)
+    create_plots_checkbox.pack(side="top", padx=10, pady=10)
    
     # Option zur Trennung von Normalkräften und Moment in getrennten Plots
     split_fmz_var = tk.BooleanVar(value=False)
