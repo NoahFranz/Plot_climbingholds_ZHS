@@ -129,3 +129,10 @@ def plot_mz_data(ax, hold_data):
     mz_cols = [col for col in hold_data.columns if "Mz" in col]
     plot_mz_on_secondary_axis(ax, time_data, hold_data, mz_cols)
     return ax.get_legend_handles_labels()
+
+def only_fgr_in_plot(forces):
+    """
+    Prüft, ob nur 'FgR' in der Liste der Kräfte enthalten ist.
+    Wenn ja, kann z. B. die y-Achsenbeschriftung angepasst werden.
+    """
+    return all(force == "FgR" for force in forces) if forces else False
