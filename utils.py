@@ -78,7 +78,7 @@ def get_force_suffix(forces_to_plot):
     Erstellt einen Suffix-String basierend auf den ausgewählten Kräften.
     Gibt '_all_' zurück, wenn alle Kräfte aktiv sind, sonst z.B. '_only_Fx_Fy'.
     """
-    all_forces = {"Fx", "Fy", "Fz", "Mz", "FgR"}
+    all_forces = {"Fx", "Fy", "Fz", "Mz", "FgR", "FgR_calc"}
 
     selected_forces = set()
     for side in ["G1", "G2"]:

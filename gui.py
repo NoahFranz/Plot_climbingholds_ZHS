@@ -30,10 +30,12 @@ def run_gui():
     plot_options_frame = tk.Frame(root)
     plot_options_frame.pack(side="top", fill="x")
 
+    submit_frame = tk.Frame(root)
+
     # Option zum Speichern der Plots
     save_plots_var = tk.BooleanVar(value=False)
-    save_plots_checkbox = tk.Checkbutton(plot_options_frame, text="Plots speichern", variable=save_plots_var)
-    save_plots_checkbox.pack(side="top", padx=10, pady=10)
+    save_plots_checkbox = tk.Checkbutton(submit_frame, text="Plots speichern", variable=save_plots_var)
+    save_plots_checkbox.pack(side="left", padx=10)
 
     # Option zum Erstellen der Plots
     create_plots_var = tk.BooleanVar(value=True)
@@ -285,8 +287,10 @@ def run_gui():
     def submit():
         root.quit()
         root.destroy()
-    submit_button = tk.Button(root, text="OK", command=submit)
-    submit_button.pack(pady=20)
+    submit_frame.pack(pady=20)
+
+    submit_button = tk.Button(submit_frame, text="OK", command=submit)
+    submit_button.pack(side="right", padx=10)
     root.mainloop()
     
     # Rückgabewerte vorbereiten
