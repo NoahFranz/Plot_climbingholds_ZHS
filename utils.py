@@ -115,3 +115,38 @@ def trim_dataframe_by_time(df, start_seconds, end_seconds):
     t_max = df["Time [s]"].max() - end_seconds
 
     return df[(df["Time [s]"] >= t_min) & (df["Time [s]"] <= t_max)].reset_index(drop=True)
+
+def prepare_data(current_dict, forces_to_plot, cutoff):
+    if current_dict is None:
+        print("Keine .lvm-Dateien gefunden.")
+        return None, [], []
+    
+    if cutoff["start"] > 0 or cutoff["end"] > 0:
+        for filename, file_data in current_dict.items():
+            for hold in ["G1R", "G2L"]:
+                if hold in file_data:
+                    df = file_data[hold]["data"]
+                    trimmed_df = trim_dataframe_by_time(df, start_seconds=cutoff["start"], end_seconds=cutoff["end"])
+                    current_dict[filename][hold]["data"] = trimmed_df
+
+    forces_g1 = [k for k, v in forces_to_plot["G1"].items() if k != "all" and v]
+    forces_g2 = [k for k, v in forces_to_plot["G2"].items() if k != "all" and v]
+    return current_dict, forces_g1, forces_g2
+
+def print_current_dict_summary(current_dict):
+    for key in current_dict:
+        print("Current_dict AFTER: global y_limits")
+        print(f"{key} →")
+        for hold, content in current_dict[key].items():
+            print(f"  {hold}: {list(content.keys())}")
+            print(f"    Spalten: {content['data'].columns.tolist()}")
+            print(f"    stats {hold}:")
+            for k, v in content["stats"].items():
+                min_v = f"{v['min']:.1f}"
+                max_v = f"{v['max']:.1f}"
+                print(f"      {k}: min= {min_v}, max= {max_v}")
+            if "global_limits" in content:
+                gl = content["global_limits"]
+                print(f"    global_limits: min= {gl['global_y_min']:.2f}, max= {gl['global_y_max']:.2f}")
+            else:
+                print("    global_limits: Nicht gesetzt")
