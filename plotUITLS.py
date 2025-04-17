@@ -134,7 +134,7 @@ def plot_mz_data(ax, hold_data):
 
 def only_fgr_in_plot(forces):
     """
-    Prüft, ob nur 'FgR' in der Liste der Kräfte enthalten ist.
+    Prüft, ob ausschließlich 'FgR' oder 'FgR_calc' in der Liste der Kräfte enthalten ist.
     Wenn ja, kann z. B. die y-Achsenbeschriftung angepasst werden.
     """
-    return all(force == "FgR" for force in forces) if forces else False
+    return all(force in {"FgR", "FgR_calc"} for force in forces) if forces else False
