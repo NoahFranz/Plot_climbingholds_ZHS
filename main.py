@@ -29,6 +29,8 @@ def main():
     else:
         current_dict = sorted_data_dict
         optional_suffix += "_raw"
+    if cutoff["active"] == True:
+        optional_suffix += "_trimmed"+"-S"+cutoff["start"]+"-E"+cutoff["end"]
 
     current_dict, forces_g1, forces_g2 = prepare_data(current_dict, forces_to_plot, cutoff)
     if current_dict is None:
@@ -48,7 +50,7 @@ def main():
                 plot_data_per_hold(data_per_file, forces_g1, forces_g2, curr_filename + optional_suffix, save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff)
         elif not plot_settings["split_fmz"] and plot_settings["compare_forces"]:
             for filename, file_data in current_dict.items():
-                plot_selected_forces_comparison(file_data, forces_g1, forces_g2, filename=filename, save_folder=save_folder, save_plot=plot_settings["save"], cutoff=cutoff)
+                plot_selected_forces_comparison(file_data, forces_g1, forces_g2, filename=filename + optional_suffix, save_folder=save_folder, save_plot=plot_settings["save"], cutoff=cutoff)
         else:
             for curr_filename, data_per_file in current_dict.items():
                 if holds_to_plot["G2"]:

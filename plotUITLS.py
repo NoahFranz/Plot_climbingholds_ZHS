@@ -50,7 +50,7 @@ def apply_default_plot_style(fig):
         labels = [line.get_label() for line in ax.get_lines()]
         if labels and all("FgR" in label for label in labels):
             ax.set_ylabel("F [%]")
-            ax.set_ylim([-10, 100])
+            ax.set_ylim([-10, 90])
 
 def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle="", save_folder="."):
     """
