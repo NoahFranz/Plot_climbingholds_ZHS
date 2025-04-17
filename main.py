@@ -6,10 +6,14 @@ import os
 
 
 def main():
-    plot_settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff = run_gui()
+    result = run_gui()
+    if result is None:
+        print("GUI abgebrochen.")
+        return
+    plot_settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff = result
     
     print("forces_to_plot:", forces_to_plot, "holds to plot", holds_to_plot)
-
+ 
     folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/T3_16_04_25"
     save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
     optional_suffix = file_paths["suffix"] or ""
