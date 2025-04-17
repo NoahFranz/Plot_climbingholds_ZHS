@@ -40,12 +40,15 @@ def run_gui():
     # Option zum Erstellen der Plots
     create_plots_var = tk.BooleanVar(value=True)
     create_plots_checkbox = tk.Checkbutton(plot_options_frame, text="Plots erstellen", variable=create_plots_var)
-    create_plots_checkbox.pack(side="top", padx=10, pady=10)
+    create_plots_checkbox.pack(side="left", padx=10)
    
     # Option zur Trennung von Normalkräften und Moment in getrennten Plots
+    trim_split_frame = tk.Frame(root)
+    trim_split_frame.pack(pady=10)
+
     split_fmz_var = tk.BooleanVar(value=False)
-    split_fmz_checkbox = tk.Checkbutton(root, text="Normalkräfte und Moment in separaten Plots? (oben: F, unten: Mz: Falls Nein: GL oben, GR unten)", variable=split_fmz_var)
-    split_fmz_checkbox.pack(pady=10)
+    split_fmz_checkbox = tk.Checkbutton(trim_split_frame, text="F und Mz trennen?", variable=split_fmz_var)
+    split_fmz_checkbox.pack(in_=trim_split_frame)
 
     # Option zum Vergleichen von Kräften pro Griff
     compare_forces_var = tk.BooleanVar(value=False)
@@ -61,8 +64,8 @@ def run_gui():
         else:
             trim_frame.pack_forget()
 
-    trim_plot_checkbox = tk.Checkbutton(root, text="Plot trimmen?", variable=trim_plot_var, command=toggle_trim_options)
-    trim_plot_checkbox.pack(pady=10)
+    trim_plot_checkbox = tk.Checkbutton(trim_split_frame, text="Plot trimmen?", variable=trim_plot_var, command=toggle_trim_options)
+    trim_plot_checkbox.pack(in_=trim_split_frame)
 
     # Collapsible Frame für Trim-Optionen
     trim_frame = tk.LabelFrame(root, text="Trim-Optionen")
@@ -169,9 +172,9 @@ def run_gui():
     griff_g1_cb = tk.Checkbutton(griff_frame, text="G1(rechts)", variable=griff_g1_var, command=update_griff_g1)
     griff_g2_cb = tk.Checkbutton(griff_frame, text="G2(links)", variable=griff_g2_var, command=update_griff_g2)
     
-    griff_all_cb.pack(anchor="w")
-    griff_g1_cb.pack(anchor="w")
-    griff_g2_cb.pack(anchor="w")
+    griff_all_cb.pack(side="left", padx=5)
+    griff_g1_cb.pack(side="left", padx=5)
+    griff_g2_cb.pack(side="left", padx=5)
     
     # Kräfte-Optionen
     kraefte_frame = tk.LabelFrame(root, text="Kräfte")
@@ -284,16 +287,31 @@ def run_gui():
     toggle_paths_options()
 
     # OK-Button
+    cancelled = {"status": False}
+
     def submit():
         root.quit()
         root.destroy()
+
+    def cancel():
+        cancelled["status"] = True
+        root.quit()
+        root.destroy()
+
     submit_frame.pack(pady=20)
 
     submit_button = tk.Button(submit_frame, text="OK", command=submit)
     submit_button.pack(side="right", padx=10)
+
+    cancel_button = tk.Button(submit_frame, text="Abbrechen", command=cancel)
+    cancel_button.pack(side="right", padx=10)
+
     root.mainloop()
     
     # Rückgabewerte vorbereiten
+    if cancelled["status"]:
+        return None
+
     plot_settings = {
         "create": create_plots_var.get(),
         "save": save_plots_var.get(),
