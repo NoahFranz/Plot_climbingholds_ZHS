@@ -3,6 +3,7 @@ import os
 import glob
 from utils import clean_data, get_min_max_values_per_column
 from scipy.signal import savgol_filter
+import numpy as np
 
 def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder):
     """
@@ -23,7 +24,7 @@ def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder):
     """
     data_dict = {}
     filtered_data_dict = {}
-    for file_path in glob.glob(os.path.join(folder_path, "*.lvm")):
+    for file_path in [fp for fp in glob.glob(os.path.join(folder_path, "*.lvm")) if "MAX" not in os.path.basename(fp)]:
         print(file_path)
         # Lese .lvm-Datei als DataFrame (Header-Zeile 21, deutsche Kommas)
         df = pd.read_csv(file_path, sep="\t", decimal=",", skiprows=0, header=21)
@@ -67,4 +68,31 @@ def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder):
                 "stats": get_min_max_values_per_column(g2l_filtered)
             }
         }
+    
+    calc_FgR(data_dict)
+    calc_FgR(filtered_data_dict)
+    
     return data_dict, filtered_data_dict if data_dict else (None, None)
+
+def calc_FgR(current_dict):
+    """
+    Fügt jeder G1R- und G2L-Datenstruktur eine neue Spalte 'FgR_calc' hinzu.
+    Formel:
+    FgR_calc = (cos(40°)*Fy + sin(40°)*Ff) / (73 * 9.81) * 100
+    """
+
+    angle_rad = np.deg2rad(40)
+    cos_40 = np.cos(angle_rad)
+    sin_40 = np.sin(angle_rad)
+
+    for file_data in current_dict.values():
+        for side in ["G1R", "G2L"]:
+            df = file_data[side]["data"]
+            fy_cols = [col for col in df.columns if "Fy" in col]
+            ff_cols = [col for col in df.columns if "Fz" in col]  # Ff ≈ Fz
+
+            if fy_cols and ff_cols:
+                fy = df[fy_cols[0]]
+                fz = df[ff_cols[0]]
+                fgr_calc = (cos_40 * fy + sin_40 * fz) / (73 * 9.81) * 100
+                file_data[side]["data"]["FgR_calc"] = fgr_calc
