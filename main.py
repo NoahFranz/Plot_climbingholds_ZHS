@@ -17,7 +17,8 @@ def main():
     folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/T3_16_04_25"
     save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
     optional_suffix = file_paths["suffix"] or ""
-    optional_suffix = optional_suffix + get_force_suffix(forces_to_plot)
+    optional_suffix = "_" + optional_suffix if optional_suffix else ""
+    optional_suffix += get_force_suffix(forces_to_plot)
     cutoff = {"start": cutoff["start"], "end": cutoff["end"]}
 
     sorted_data_dict, filtered_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"])
@@ -29,42 +30,16 @@ def main():
         current_dict = sorted_data_dict
         optional_suffix += "_raw"
 
+    current_dict, forces_g1, forces_g2 = prepare_data(current_dict, forces_to_plot, cutoff)
     if current_dict is None:
-        print("Keine .lvm-Dateien gefunden.")
         return
-    if cutoff["start"] > 0 or cutoff["end"] > 0:
-        for filename, file_data in current_dict.items():
-            for hold in ["G1R", "G2L"]:
-                if hold in file_data:
-                    df = file_data[hold]["data"]
-                    trimmed_df = trim_dataframe_by_time(df, start_seconds=cutoff["start"], end_seconds=cutoff["end"])
-                    current_dict[filename][hold]["data"] = trimmed_df
-
-    forces_g1 = [k for k, v in forces_to_plot["G1"].items() if k != "all" and v]
-    forces_g2 = [k for k, v in forces_to_plot["G2"].items() if k != "all" and v]
 
     
 
     # compute globale limits for y_limits and save it with every Hold such that every dataframe can access it
     for filename, file_data in current_dict.items():
         current_dict[filename] = compute_global_ylimits_for_plots(file_data, forces_g1, forces_g2)
-    for key in current_dict:
-        print("Current_dict AFTER: global y_limits")
-        print(f"{key} →")
-        for hold, content in current_dict[key].items():
-            print(f"  {hold}: {list(content.keys())}")
-            print(f"    Spalten: {content['data'].columns.tolist()}")
-                # global_limits anzeigen, falls vorhanden
-            print(f"    stats {hold}:")
-            for k, v in content["stats"].items():
-                min_v = f"{v['min']:.1f}"
-                max_v = f"{v['max']:.1f}"
-                print(f"      {k}: min= {min_v}, max= {max_v}")
-            if "global_limits" in content:
-                gl = content["global_limits"]
-                print(f"    global_limits: min= {gl['global_y_min']:.2f}, max= {gl['global_y_max']:.2f}")
-            else:
-                print("    global_limits: Nicht gesetzt")
+    print_current_dict_summary(current_dict=current_dict)
 
     if plot_settings["create"]:
         if not plot_settings["split_fmz"] and not plot_settings["compare_forces"]:

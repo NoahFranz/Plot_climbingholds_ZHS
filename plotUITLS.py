@@ -46,6 +46,12 @@ def apply_default_plot_style(fig):
             legend._ncol = 4
             legend.set_frame_on(True)
 
+        # Dynamischer y-Label und Achsenbereich für FgR
+        labels = [line.get_label() for line in ax.get_lines()]
+        if labels and all("FgR" in label for label in labels):
+            ax.set_ylabel("F [%]")
+            ax.set_ylim([-10, 100])
+
 def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle="", save_folder="."):
     """
     Setzt den Figure-Titel auf einen eindeutigen Namen, der aus 'filename' und 'grip_label'
@@ -138,3 +144,15 @@ def only_fgr_in_plot(forces):
     Wenn ja, kann z. B. die y-Achsenbeschriftung angepasst werden.
     """
     return all(force in {"FgR", "FgR_calc"} for force in forces) if forces else False
+
+def set_dynamic_ylabel(ax):
+    """
+    Setzt den y-Achsentitel je nach Dateninhalt.
+    Wenn alle gezeigten Linien nur 'FgR' oder 'FgR_calc' enthalten,
+    wird 'F [%]' gesetzt, sonst 'F [N]'.
+    """
+    labels = [line.get_label() for line in ax.get_lines()]
+    if all("FgR" in label for label in labels):
+        ax.set_ylabel("F [%]")
+    else:
+        ax.set_ylabel("Kräfte [N]")
