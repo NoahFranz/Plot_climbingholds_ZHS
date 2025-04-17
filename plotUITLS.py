@@ -43,7 +43,7 @@ def apply_default_plot_style(fig):
         legend = ax.get_legend()
         if legend:
             legend.prop.set_size(3)
-            legend._ncol = 4
+            legend._ncol = 5
             legend.set_frame_on(True)
 
         # Dynamischer y-Label und Achsenbereich für FgR
@@ -51,6 +51,17 @@ def apply_default_plot_style(fig):
         if labels and all("FgR" in label for label in labels):
             ax.set_ylabel("F [%]")
             ax.set_ylim([-5, 90])
+        elif any("FgR" in label for label in labels) and not all("FgR" in label for label in labels):
+            # Sekundärachse für FgR erzeugen
+            sec_ax = ax.twinx()
+            for line in ax.get_lines():
+                if "FgR" in line.get_label():
+                    # Zeichne FgR-Linien auf sec_ax erneut
+                    sec_ax.plot(line.get_xdata(), line.get_ydata(), label=line.get_label(), color=line.get_color(), linestyle=line.get_linestyle())
+                    line.set_visible(False)  # Original-Linie ausblenden
+            sec_ax.set_ylabel("F [%]")
+            sec_ax.set_ylim([-5, 90])
+            combine_legends(ax, sec_ax, loc="upper left", ncol=5)
 
 def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle="", save_folder="."):
     """

@@ -95,4 +95,5 @@ def calc_FgR(current_dict):
                 fy = df[fy_cols[0]]
                 fz = df[ff_cols[0]]
                 fgr_calc = (cos_40 * fy + sin_40 * fz) / (73 * 9.81) * 100
-                file_data[side]["data"].loc[:, "FgR_calc"] = fgr_calc
+                df = file_data[side]["data"]
+                df.loc[:, "FgR_calc"] = fgr_calc

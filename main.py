@@ -19,7 +19,6 @@ def main():
     optional_suffix = file_paths["suffix"] or ""
     optional_suffix = "_" + optional_suffix if optional_suffix else ""
     optional_suffix += get_force_suffix(forces_to_plot)
-    cutoff = {"start": cutoff["start"], "end": cutoff["end"]}
 
     sorted_data_dict, filtered_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"])
 
@@ -29,8 +28,8 @@ def main():
     else:
         current_dict = sorted_data_dict
         optional_suffix += "_raw"
-    if cutoff["active"] == True:
-        optional_suffix += "_trimmed"+"-S"+cutoff["start"]+"-E"+cutoff["end"]
+    if cutoff.get("active", False):
+        optional_suffix += f"_trimmed-S{cutoff['start']}-E{cutoff['end']}"
 
     current_dict, forces_g1, forces_g2 = prepare_data(current_dict, forces_to_plot, cutoff)
     if current_dict is None:
