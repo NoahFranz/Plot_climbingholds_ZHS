@@ -10,7 +10,7 @@ def main():
     
     print("forces_to_plot:", forces_to_plot, "holds to plot", holds_to_plot)
 
-    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/Test tag 2"
+    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/T3_16_04_25"
     save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
     optional_suffix = file_paths["suffix"] or ""
     optional_suffix = optional_suffix + get_force_suffix(forces_to_plot)
@@ -30,11 +30,11 @@ def main():
         return
     if cutoff["start"] > 0 or cutoff["end"] > 0:
         for filename, file_data in current_dict.items():
-            for side in ["G1R", "G2L"]:
-                if side in file_data:
-                    df = file_data[side]["data"]
+            for hold in ["G1R", "G2L"]:
+                if hold in file_data:
+                    df = file_data[hold]["data"]
                     trimmed_df = trim_dataframe_by_time(df, start_seconds=cutoff["start"], end_seconds=cutoff["end"])
-                    current_dict[filename][side]["data"] = trimmed_df
+                    current_dict[filename][hold]["data"] = trimmed_df
 
     forces_g1 = [k for k, v in forces_to_plot["G1"].items() if k != "all" and v]
     forces_g2 = [k for k, v in forces_to_plot["G2"].items() if k != "all" and v]
@@ -47,13 +47,18 @@ def main():
     for key in current_dict:
         print("Current_dict AFTER: global y_limits")
         print(f"{key} →")
-        for side, content in current_dict[key].items():
-            print(f"  {side}: {list(content.keys())}")
+        for hold, content in current_dict[key].items():
+            print(f"  {hold}: {list(content.keys())}")
             print(f"    Spalten: {content['data'].columns.tolist()}")
                 # global_limits anzeigen, falls vorhanden
+            print(f"    stats {hold}:")
+            for k, v in content["stats"].items():
+                min_v = f"{v['min']:.1f}"
+                max_v = f"{v['max']:.1f}"
+                print(f"      {k}: min= {min_v}, max= {max_v}")
             if "global_limits" in content:
                 gl = content["global_limits"]
-                print(f"    global_limits: min={gl['global_y_min']:.2f}, max={gl['global_y_max']:.2f}")
+                print(f"    global_limits: min= {gl['global_y_min']:.2f}, max= {gl['global_y_max']:.2f}")
             else:
                 print("    global_limits: Nicht gesetzt")
 

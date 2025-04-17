@@ -184,6 +184,7 @@ def run_gui():
     g1_Fx_var = tk.BooleanVar(value=True)
     g1_Mz_var = tk.BooleanVar(value=True)
     g1_FgR_var = tk.BooleanVar(value=True)
+    g1_FgR_calc_var = tk.BooleanVar(value=False)
     
     def update_kraefte_g1():
         g1_Fy_var.set(g1_all_var.get())
@@ -191,11 +192,12 @@ def run_gui():
         g1_Fz_var.set(g1_all_var.get())
         g1_Mz_var.set(g1_all_var.get())
         g1_FgR_var.set(g1_all_var.get())
+        g1_FgR_calc_var.set(g1_all_var.get())
     
     def update_kraft_g1_single():
-        if not all([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get()]):
+        if not all([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_calc_var.get()]):
             g1_all_var.set(False)
-        if any([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get()]):
+        if any([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_calc_var.get()]):
             griff_g1_var.set(True)
     
     g1_all_cb = tk.Checkbutton(kraefte_g1_frame, text="all", variable=g1_all_var, command=update_kraefte_g1)
@@ -204,6 +206,7 @@ def run_gui():
     g1_Fx_cb = tk.Checkbutton(kraefte_g1_frame, text="Fx", variable=g1_Fx_var, command=update_kraft_g1_single)
     g1_Mz_cb = tk.Checkbutton(kraefte_g1_frame, text="Mz", variable=g1_Mz_var, command=update_kraft_g1_single)
     g1_FgR_cb = tk.Checkbutton(kraefte_g1_frame, text="FgR", variable=g1_FgR_var, command=update_kraft_g1_single)
+    g1_FgR_calc_cb = tk.Checkbutton(kraefte_g1_frame, text="FgR_calc", variable=g1_FgR_calc_var, command=update_kraft_g1_single)
     
     g1_all_cb.pack(anchor="w")
     g1_Fy_cb.pack(anchor="w")
@@ -211,6 +214,7 @@ def run_gui():
     g1_Fx_cb.pack(anchor="w")
     g1_Mz_cb.pack(anchor="w")
     g1_FgR_cb.pack(anchor="w")
+    g1_FgR_calc_cb.pack(anchor="w")
     
     # Für G2
     kraefte_g2_frame = tk.LabelFrame(kraefte_frame, text="G2")
@@ -223,7 +227,7 @@ def run_gui():
     g2_Fx_var = tk.BooleanVar(value=True)
     g2_Mz_var = tk.BooleanVar(value=True)
     g2_FgR_var = tk.BooleanVar(value=True)    
-
+    g2_FgR_calc_var = tk.BooleanVar(value=False)
 
     def update_kraefte_g2():
         g2_Fy_var.set(g2_all_var.get())
@@ -231,11 +235,12 @@ def run_gui():
         g2_Fx_var.set(g2_all_var.get()) 
         g2_Mz_var.set(g2_all_var.get())
         g2_FgR_var.set(g2_all_var.get())
+        g2_FgR_calc_var.set(g2_all_var.get())
     
     def update_kraft_g2_single():
-        if not all([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get()]):
+        if not all([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_calc_var.get()]):
             g2_all_var.set(False)
-        if any([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get()]):
+        if any([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_calc_var.get()]):
             griff_g2_var.set(True)
     
     g2_all_cb = tk.Checkbutton(kraefte_g2_frame, text="all", variable=g2_all_var, command=update_kraefte_g2)
@@ -244,13 +249,15 @@ def run_gui():
     g2_Fx_cb = tk.Checkbutton(kraefte_g2_frame, text="Fx", variable=g2_Fx_var, command=update_kraft_g2_single)  
     g2_Mz_cb = tk.Checkbutton(kraefte_g2_frame, text="Mz", variable=g2_Mz_var, command=update_kraft_g2_single)
     g2_FgR_cb = tk.Checkbutton(kraefte_g2_frame, text="FgR", variable=g2_FgR_var, command=update_kraft_g2_single)
+    g2_FgR_calc_cb = tk.Checkbutton(kraefte_g2_frame, text="FgR_calc", variable=g2_FgR_calc_var, command=update_kraft_g2_single)
     
     g2_all_cb.pack(anchor="w")
     g2_Fy_cb.pack(anchor="w")
     g2_Fz_cb.pack(anchor="w")
     g2_Fx_cb.pack(anchor="w")
     g2_Mz_cb.pack(anchor="w")
-    g2_FgR_cb.pack(anchor="w")    
+    g2_FgR_cb.pack(anchor="w")
+    g2_FgR_calc_cb.pack(anchor="w")    
 
     
     update_griff_all()
@@ -319,14 +326,16 @@ def run_gui():
             "Fx": g1_Fx_var.get(),
             "Fz": g1_Fz_var.get(),
             "Mz": g1_Mz_var.get(),
-            "FgR": g1_FgR_var.get()
+            "FgR": g1_FgR_var.get(),
+            "FgR_calc": g1_FgR_calc_var.get()
         },
         "G2": {
             "Fy": g2_Fy_var.get(),
             "Fx": g2_Fx_var.get(),
             "Fz": g2_Fz_var.get(),
             "Mz": g2_Mz_var.get(),
-            "FgR": g2_FgR_var.get()
+            "FgR": g2_FgR_var.get(),
+            "FgR_calc": g2_FgR_calc_var.get()
         }
     }
     

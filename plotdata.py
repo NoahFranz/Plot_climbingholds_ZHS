@@ -12,7 +12,7 @@ def adjust_color(color, shift=0.2):
     return (r, g, b)
 NCOL = 5
 DEFAULT_FIGSIZE = (6.3, 8)
-COLOR_MAPPING = {"Fy": "blue","Fx": "green", "Fz": "orange", "Mz": "#8B1A1A", "FgR": "#9ACD32"}  # Kaminrot
+COLOR_MAPPING = {"Fy": "blue","Fx": "green", "Fz": "orange", "Mz": "#8B1A1A", "FgR": "#9ACD32", "FgR_calc": "#32CD32"}  # Kaminrot
 
 def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", save_plot=False, margin=1.25, save_folder=".", cutoff=None):
     """
@@ -26,7 +26,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
       forces : list
           Liste der auszuwertenden Kräfte.
       filename : str
-          Dateiname für die Speicherung des Plots.
+          Dateiname für die Speicherung des Plots.x
       grip_label : str
           Label des Griffs (z. B. G1R/G2L).
       save_plot : bool
