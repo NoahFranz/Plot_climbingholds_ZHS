@@ -90,4 +90,4 @@ def calc_resultant_fy_fz(current_dict):
                 phiyz = angle - 40  # Bezug zur Senkrechten (Wandwinkel)
 
                 df.loc[:, "Fres"] = fres
-                df.loc[:, "phiyz"] = phiyz
+                df.loc[:, "φ_yz"] = phiyz
