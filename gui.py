@@ -81,6 +81,8 @@ def run_gui():
     cutoff_end_entry = tk.Entry(trim_frame, textvariable=cutoff_end_var)
     cutoff_end_entry.pack(fill="x", padx=5)
 
+
+
     # Option zur verwendung des Savatzgi-Goolay filters
     use_SVG_filter_var = tk.BooleanVar(value=True)
     use_SVG_filter_checkbox = tk.Checkbutton(root, text="Savatzgi-golay filter verwenden?", variable=use_SVG_filter_var)
@@ -190,6 +192,13 @@ def run_gui():
     g1_Mz_var = tk.BooleanVar(value=True)
     g1_FgR_var = tk.BooleanVar(value=True)
     g1_FgR_calc_var = tk.BooleanVar(value=False)
+    g1_Fres_var = tk.BooleanVar(value=False)
+    g1_Fres_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres", variable=g1_Fres_var, command=lambda: update_kraft_g1_single())
+    g1_Fres_cb.pack(anchor="w")
+
+    g1_phi_var = tk.BooleanVar(value=False)
+    g1_phi_cb = tk.Checkbutton(kraefte_g1_frame, text="φ_yz", variable=g1_phi_var, command=lambda: update_kraft_g1_single())
+    g1_phi_cb.pack(anchor="w")
     
     def update_kraefte_g1():
         g1_Fy_var.set(g1_all_var.get())
@@ -198,11 +207,13 @@ def run_gui():
         g1_Mz_var.set(g1_all_var.get())
         g1_FgR_var.set(g1_all_var.get())
         g1_FgR_calc_var.set(g1_all_var.get())
+        g1_Fres_var.set(g1_all_var.get())
+        g1_phi_var.set(g1_all_var.get())
     
     def update_kraft_g1_single():
-        if not all([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_calc_var.get()]):
+        if not all([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_calc_var.get(), g1_Fres_var.get(), g1_phi_var.get()]):
             g1_all_var.set(False)
-        if any([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_calc_var.get()]):
+        if any([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_calc_var.get(), g1_Fres_var.get(), g1_phi_var.get()]):
             griff_g1_var.set(True)
     
     g1_all_cb = tk.Checkbutton(kraefte_g1_frame, text="all", variable=g1_all_var, command=update_kraefte_g1)
@@ -233,6 +244,13 @@ def run_gui():
     g2_Mz_var = tk.BooleanVar(value=True)
     g2_FgR_var = tk.BooleanVar(value=True)    
     g2_FgR_calc_var = tk.BooleanVar(value=False)
+    g2_Fres_var = tk.BooleanVar(value=False)
+    g2_Fres_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres", variable=g2_Fres_var, command=lambda: update_kraft_g2_single())
+    g2_Fres_cb.pack(anchor="w")
+
+    g2_phi_var = tk.BooleanVar(value=False)
+    g2_phi_cb = tk.Checkbutton(kraefte_g2_frame, text="φ_yz", variable=g2_phi_var, command=lambda: update_kraft_g2_single())
+    g2_phi_cb.pack(anchor="w")
 
     def update_kraefte_g2():
         g2_Fy_var.set(g2_all_var.get())
@@ -241,11 +259,13 @@ def run_gui():
         g2_Mz_var.set(g2_all_var.get())
         g2_FgR_var.set(g2_all_var.get())
         g2_FgR_calc_var.set(g2_all_var.get())
+        g2_Fres_var.set(g2_all_var.get())
+        g2_phi_var.set(g2_all_var.get())
     
     def update_kraft_g2_single():
-        if not all([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_calc_var.get()]):
+        if not all([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_calc_var.get(), g2_Fres_var.get(), g2_phi_var.get()]):
             g2_all_var.set(False)
-        if any([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_calc_var.get()]):
+        if any([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_calc_var.get(), g2_Fres_var.get(), g2_phi_var.get()]):
             griff_g2_var.set(True)
     
     g2_all_cb = tk.Checkbutton(kraefte_g2_frame, text="all", variable=g2_all_var, command=update_kraefte_g2)
@@ -349,7 +369,9 @@ def run_gui():
             "Fz": g1_Fz_var.get(),
             "Mz": g1_Mz_var.get(),
             "FgR": g1_FgR_var.get(),
-            "FgR_calc": g1_FgR_calc_var.get()
+            "FgR_calc": g1_FgR_calc_var.get(),
+            "Fres": g1_Fres_var.get(),
+            "φ_yz": g1_phi_var.get()
         },
         "G2": {
             "Fy": g2_Fy_var.get(),
@@ -357,7 +379,9 @@ def run_gui():
             "Fz": g2_Fz_var.get(),
             "Mz": g2_Mz_var.get(),
             "FgR": g2_FgR_var.get(),
-            "FgR_calc": g2_FgR_calc_var.get()
+            "FgR_calc": g2_FgR_calc_var.get(),
+            "Fres": g2_Fres_var.get(),
+            "φ_yz": g2_phi_var.get()
         }
     }
     
