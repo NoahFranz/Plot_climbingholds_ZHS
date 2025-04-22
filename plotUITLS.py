@@ -1,3 +1,4 @@
+from scipy.io import savemat
 import matplotlib.pyplot as plt
 import pandas as pd
 import math
@@ -177,3 +178,29 @@ def set_dynamic_ylabel(ax):
         ax.set_ylabel("Winkel [°]")
     else:
         ax.set_ylabel("Kräfte [N]")
+def export_figure_data_as_mat(fig, filename="figure_export.mat"):
+    """
+    Exportiert die Daten aller Linien in der übergebenen Matplotlib-Figure als .mat-Datei,
+    sodass sie in MATLAB importiert werden können.
+
+    Jede Achse wird separat benannt, jede Linie bekommt ihre x- und y-Werte und ihr Label.
+
+    Parameter:
+        fig : matplotlib.figure.Figure
+            Die zu exportierende Figure.
+        filename : str
+            Name der Zieldatei (.mat)
+    """
+    export_data = {}
+
+    for i, ax in enumerate(fig.get_axes()):
+        lines = ax.get_lines()
+        for j, line in enumerate(lines):
+            label = line.get_label()
+            key_base = f"ax{i+1}_line{j+1}"
+            export_data[f"{key_base}_x"] = line.get_xdata()
+            export_data[f"{key_base}_y"] = line.get_ydata()
+            export_data[f"{key_base}_label"] = label
+
+    savemat(filename, export_data)
+    print(f"Figure-Daten als .mat-Datei gespeichert: {filename}")
