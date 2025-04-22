@@ -272,18 +272,23 @@ def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, s
                 base_force = next((f for f in COLOR_MAPPING if f in current_force), None)
                 base_color = COLOR_MAPPING.get(base_force, "black")
                 curr_color = adjust_color(base_color, shift=0.15) if current_hold == "G2L" else base_color
+
             matching_cols = [col for col in file_dict[current_hold]["data"].columns if current_force in col]
+            if not matching_cols:
+                continue
+            time = file_dict[current_hold]["data"]["Time [s]"]
             plot_force = file_dict[current_hold]["data"][matching_cols[0]]
+
             if axFlag == 0:
-                ax_top.plot(time, plot_force, 
-                        label=clean_label(current_force)+legend_suffix, 
-                        color=curr_color, alpha = curr_alpha)
-            if axFlag == 1:
-                ax_bottom.plot(time, plot_force, 
-                    label=clean_label(current_force)+legend_suffix, 
-                    color=curr_color, alpha = curr_alpha)
+                ax_top.plot(time, plot_force,
+                            label=clean_label(current_force)+legend_suffix,
+                            color=curr_color, alpha=curr_alpha)
+            elif axFlag == 1:
+                ax_bottom.plot(time, plot_force,
+                               label=clean_label(current_force)+legend_suffix,
+                               color=curr_color, alpha=curr_alpha)
             else:
-                    print("all plots populated already, only 2 Forces are possible per plot")
+                print("all plots populated already, only 2 Forces are possible per plot")
         axFlag = 1
     
     # equal limits for both forces

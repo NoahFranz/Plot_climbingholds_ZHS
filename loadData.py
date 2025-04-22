@@ -53,6 +53,11 @@ def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter):
         g1r = trim_by_dataflanke(g1r)
         g2l = trim_by_dataflanke(g2l)
         
+        # Angleichung der Längen beider Seiten nach dem Trimmen
+        min_len = min(len(g1r), len(g2l))
+        g1r = g1r.iloc[:min_len].reset_index(drop=True)
+        g2l = g2l.iloc[:min_len].reset_index(drop=True)
+
         def apply_filter(df):
             df_filtered = df.copy()
             for col in df.columns:
