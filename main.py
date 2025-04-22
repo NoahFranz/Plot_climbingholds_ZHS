@@ -20,13 +20,12 @@ def main():
     optional_suffix = "_" + optional_suffix if optional_suffix else ""
     optional_suffix += get_force_suffix(forces_to_plot)
 
-    sorted_data_dict, filtered_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"], usefilter = filter_settings["use_filter"])
+    all_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"], usefilter = filter_settings["use_filter"])
 
     if filter_settings["use_filter"]:
-        current_dict = filtered_data_dict
         optional_suffix += "_filtered_with-" + str(filter_settings["window_length"]) + "-" + str(filter_settings["polyorder"])
     else:
-        current_dict = sorted_data_dict
+        current_dict = loaded_dict
         optional_suffix += "_raw"
     if cutoff.get("active", False):
         optional_suffix += f"_trimmed-S{cutoff['start']}-E{cutoff['end']}"

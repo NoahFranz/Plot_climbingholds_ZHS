@@ -6,6 +6,36 @@ from scipy.signal import savgol_filter
 import numpy as np
 
 
+"""
+Lädt .lvm-Dateien aus dem angegebenen Verzeichnis und bereitet sie für die spätere Analyse auf.
+
+Abhängig vom Parameter 'usefilter' wird entweder das gefilterte oder das ungefilterte Dictionary erzeugt.
+Die Filterung erfolgt mit dem Savitzky-Golay-Filter (Fensterlänge, Polynomgrad einstellbar).
+
+Für jede .lvm-Datei wird ein Eintrag im Rückgabe-Dictionary erzeugt.
+Struktur des Rückgabewerts:
+  {
+      "Dateiname": {
+          "G1R": {
+              "data": DataFrame der rechten Seite (Spalten mit '1'),
+              "stats": Dictionary mit min/max Werten pro Spalte
+          },
+          "G2L": {
+              "data": DataFrame der linken Seite (Spalten mit '2'),
+              "stats": Dictionary mit min/max Werten pro Spalte
+          }
+      },
+      ...
+  }
+
+Zusätzlich werden folgende Spalten ergänzt:
+  - 'FgR_calc': Berechnete relative Griffkraft
+  - 'Fres': Resultierende aus Fy und Fz
+  - 'φ_yz': Winkel zwischen Fres und der Senkrechten (korrigiert um 40°)
+
+Rückgabe:
+  dict[str, dict[str, dict[str, Any]]]
+"""
 def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter):
     data_dict = {}
     filtered_data_dict = {}

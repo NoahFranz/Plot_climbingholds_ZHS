@@ -12,7 +12,16 @@ def adjust_color(color, shift=0.2):
     return (r, g, b)
 NCOL = 5
 DEFAULT_FIGSIZE = (6.3, 8)
-COLOR_MAPPING = {"Fy": "blue","Fx": "green", "Fz": "orange", "Mz": "#8B1A1A", "FgR": "#9ACD32", "FgR_calc": "#32CD32"}  # Kaminrot
+COLOR_MAPPING = {
+    "Fy": "blue",
+    "Fx": "green",
+    "Fz": "orange",
+    "Mz": "#8B1A1A",  # Kaminrot
+    "FgR": "#9ACD32",
+    "FgR_calc": "#32CD32",
+    "Fres": "#4B0082",     # Indigo
+    "φ_yz": "#800080"      # Lila
+}
 
 def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", save_plot=False, margin=1.25, save_folder=".", cutoff=None):
     """
