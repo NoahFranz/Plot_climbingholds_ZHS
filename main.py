@@ -49,7 +49,7 @@ def main():
                 plot_data_per_hold(data_per_file, forces_g1, forces_g2, curr_filename + optional_suffix, save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff)
         
         # Fall 2: Vergleich der Kräfte pro Griff (kein Split, aber Vergleich aktiviert)
-        elif not plot_settings["split_fmz"] and plot_settings["compare_forces"]:
+        elif not plot_settings["split_fmz"] and plot_settings["compargie_forces"]:
             for filename, file_data in all_lvm_data_dict.items():
                 plot_selected_forces_comparison(file_data, forces_g1, forces_g2, filename=filename + optional_suffix, save_folder=save_folder, save_plot=plot_settings["save"], cutoff=cutoff)
         

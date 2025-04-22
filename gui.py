@@ -194,11 +194,8 @@ def run_gui():
     g1_FgR_calc_var = tk.BooleanVar(value=False)
     g1_Fres_var = tk.BooleanVar(value=False)
     g1_Fres_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres", variable=g1_Fres_var, command=lambda: update_kraft_g1_single())
-    g1_Fres_cb.pack(anchor="w")
-
     g1_phi_var = tk.BooleanVar(value=False)
     g1_phi_cb = tk.Checkbutton(kraefte_g1_frame, text="φ_yz", variable=g1_phi_var, command=lambda: update_kraft_g1_single())
-    g1_phi_cb.pack(anchor="w")
     
     def update_kraefte_g1():
         g1_Fy_var.set(g1_all_var.get())
@@ -223,7 +220,8 @@ def run_gui():
     g1_Mz_cb = tk.Checkbutton(kraefte_g1_frame, text="Mz", variable=g1_Mz_var, command=update_kraft_g1_single)
     g1_FgR_cb = tk.Checkbutton(kraefte_g1_frame, text="FgR", variable=g1_FgR_var, command=update_kraft_g1_single)
     g1_FgR_calc_cb = tk.Checkbutton(kraefte_g1_frame, text="FgR_calc", variable=g1_FgR_calc_var, command=update_kraft_g1_single)
-    
+
+    # Pack Reihenfolge: all zuerst, dann die anderen
     g1_all_cb.pack(anchor="w")
     g1_Fy_cb.pack(anchor="w")
     g1_Fz_cb.pack(anchor="w")
@@ -231,6 +229,8 @@ def run_gui():
     g1_Mz_cb.pack(anchor="w")
     g1_FgR_cb.pack(anchor="w")
     g1_FgR_calc_cb.pack(anchor="w")
+    g1_Fres_cb.pack(anchor="w")
+    g1_phi_cb.pack(anchor="w")
     
     # Für G2
     kraefte_g2_frame = tk.LabelFrame(kraefte_frame, text="G2")
@@ -246,11 +246,8 @@ def run_gui():
     g2_FgR_calc_var = tk.BooleanVar(value=False)
     g2_Fres_var = tk.BooleanVar(value=False)
     g2_Fres_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres", variable=g2_Fres_var, command=lambda: update_kraft_g2_single())
-    g2_Fres_cb.pack(anchor="w")
-
     g2_phi_var = tk.BooleanVar(value=False)
     g2_phi_cb = tk.Checkbutton(kraefte_g2_frame, text="φ_yz", variable=g2_phi_var, command=lambda: update_kraft_g2_single())
-    g2_phi_cb.pack(anchor="w")
 
     def update_kraefte_g2():
         g2_Fy_var.set(g2_all_var.get())
@@ -275,14 +272,17 @@ def run_gui():
     g2_Mz_cb = tk.Checkbutton(kraefte_g2_frame, text="Mz", variable=g2_Mz_var, command=update_kraft_g2_single)
     g2_FgR_cb = tk.Checkbutton(kraefte_g2_frame, text="FgR", variable=g2_FgR_var, command=update_kraft_g2_single)
     g2_FgR_calc_cb = tk.Checkbutton(kraefte_g2_frame, text="FgR_calc", variable=g2_FgR_calc_var, command=update_kraft_g2_single)
-    
+
+    # Pack Reihenfolge: all zuerst, dann die anderen
     g2_all_cb.pack(anchor="w")
     g2_Fy_cb.pack(anchor="w")
     g2_Fz_cb.pack(anchor="w")
     g2_Fx_cb.pack(anchor="w")
     g2_Mz_cb.pack(anchor="w")
     g2_FgR_cb.pack(anchor="w")
-    g2_FgR_calc_cb.pack(anchor="w")    
+    g2_FgR_calc_cb.pack(anchor="w")
+    g2_Fres_cb.pack(anchor="w")
+    g2_phi_cb.pack(anchor="w")
 
     
     update_griff_all()
