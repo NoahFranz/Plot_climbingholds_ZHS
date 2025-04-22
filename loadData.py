@@ -49,6 +49,9 @@ def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter):
         clean_df = clean_data(df)
         g1r = clean_df[["Time [s]"] + [col for col in clean_df.columns if "1" in col]]
         g2l = clean_df[["Time [s]"] + [col for col in clean_df.columns if "2" in col]]
+        # Trimme Daten an der Datenflanke
+        g1r = trim_by_dataflanke(g1r)
+        g2l = trim_by_dataflanke(g2l)
         
         def apply_filter(df):
             df_filtered = df.copy()
@@ -121,3 +124,35 @@ def calc_resultant_fy_fz(current_dict):
 
                 df.loc[:, "Fres"] = fres
                 df.loc[:, "φ_yz"] = phiyz
+
+
+# --- Hilfsfunktion: trim_by_dataflanke ---
+def trim_by_dataflanke(df, schwellwert=10, offset_sec=5):
+    """
+    Schneidet alle Daten vor einer erkannten Datenflanke ab.
+    Die Datenflanke ist definiert als ein signifikanter Anstieg z.B. in Fy.
+    Es bleiben nur Daten ab (t_flanke - offset_sec) erhalten.
+
+    Parameter:
+        df : DataFrame mit 'Time [s]' und mindestens einer Kraftspalte
+        schwellwert : float – minimale Änderung, um eine Flanke zu erkennen
+        offset_sec : float – Zeit in Sekunden, die vor der Flanke erhalten bleiben soll
+
+    Rückgabe:
+        getrimmter DataFrame
+    """
+    ref_col = next((col for col in df.columns if "Fy" in col), None)
+    if ref_col is None:
+        return df  # kein Fy, keine Flanke
+
+    diffs = np.abs(df[ref_col].diff())
+    diffs = diffs.rolling(window=5, min_periods=1).mean()
+
+    flank_index = diffs[diffs > schwellwert].first_valid_index()
+    if flank_index is None:
+        return df  # keine Flanke gefunden
+
+    t_flanke = df.loc[flank_index, "Time [s]"]
+    t_start = max(0, t_flanke - offset_sec)
+
+    return df[df["Time [s]"] >= t_start].reset_index(drop=True)
