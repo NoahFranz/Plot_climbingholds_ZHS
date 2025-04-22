@@ -127,32 +127,44 @@ def calc_resultant_fy_fz(current_dict):
 
 
 # --- Hilfsfunktion: trim_by_dataflanke ---
-def trim_by_dataflanke(df, schwellwert=10, offset_sec=5):
+def trim_by_dataflanke(df, schwellwert=10, offset_sec=3):
     """
-    Schneidet alle Daten vor einer erkannten Datenflanke ab.
+    Schneidet alle Daten vor der ersten und nach der letzten erkannten Datenflanke ab.
     Die Datenflanke ist definiert als ein signifikanter Anstieg z.B. in Fy.
-    Es bleiben nur Daten ab (t_flanke - offset_sec) erhalten.
+    Es bleiben nur Daten im Intervall (t_start - offset_sec) bis (t_ende + offset_sec) erhalten.
+    Falls mehrere Fy-Spalten vorhanden sind, wird der früheste Startzeitpunkt und späteste Endzeitpunkt berücksichtigt.
 
     Parameter:
         df : DataFrame mit 'Time [s]' und mindestens einer Kraftspalte
         schwellwert : float – minimale Änderung, um eine Flanke zu erkennen
-        offset_sec : float – Zeit in Sekunden, die vor der Flanke erhalten bleiben soll
+        offset_sec : float – Zeit in Sekunden als Puffer vor und nach den Flanken
 
     Rückgabe:
         getrimmter DataFrame
     """
-    ref_col = next((col for col in df.columns if "Fy" in col), None)
-    if ref_col is None:
-        return df  # kein Fy, keine Flanke
+    fy_cols = [col for col in df.columns if "Fy" in col]
+    if not fy_cols:
+        return df  # keine Fy-Spalte vorhanden
 
-    diffs = np.abs(df[ref_col].diff())
-    diffs = diffs.rolling(window=5, min_periods=1).mean()
+    flank_starts = []
+    flank_ends = []
 
-    flank_index = diffs[diffs > schwellwert].first_valid_index()
-    if flank_index is None:
-        return df  # keine Flanke gefunden
+    for col in fy_cols:
+        diffs = np.abs(df[col].diff())
+        diffs = diffs.rolling(window=5, min_periods=1).mean()
 
-    t_flanke = df.loc[flank_index, "Time [s]"]
-    t_start = max(0, t_flanke - offset_sec)
+        start_idx = diffs[diffs > schwellwert].first_valid_index()
+        end_idx = diffs[diffs > schwellwert].last_valid_index()
 
-    return df[df["Time [s]"] >= t_start].reset_index(drop=True)
+        if start_idx is not None:
+            flank_starts.append(df.loc[start_idx, "Time [s]"])
+        if end_idx is not None:
+            flank_ends.append(df.loc[end_idx, "Time [s]"])
+
+    if not flank_starts or not flank_ends:
+        return df  # keine gültige Flanke gefunden
+
+    t_start = max(0, min(flank_starts) - offset_sec)
+    t_end = max(flank_ends) + offset_sec
+
+    return df[(df["Time [s]"] >= t_start) & (df["Time [s]"] <= t_end)].reset_index(drop=True)

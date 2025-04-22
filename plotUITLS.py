@@ -35,9 +35,11 @@ def apply_default_plot_style(fig):
         ax.title.set_fontsize(12)
         ax.xaxis.label.set_fontsize(11)
         ax.yaxis.label.set_fontsize(11)
+        set_dynamic_ylabel(ax)
         for label in ax.get_xticklabels() + ax.get_yticklabels():
             label.set_fontname("Arial")
             label.set_fontsize(10)
+
     
     for ax in fig.get_axes():
         legend = ax.get_legend()
@@ -156,14 +158,22 @@ def only_fgr_in_plot(forces):
     """
     return all(force in {"FgR", "FgR_calc"} for force in forces) if forces else False
 
+def only_phi_in_plot(forces):
+    """
+    Prüft, ob ausschließlich 'φ_yz' in der Liste der Kräfte enthalten ist.
+    """
+    return all(force == "φ_yz" for force in forces) if forces else False
+
 def set_dynamic_ylabel(ax):
     """
     Setzt den y-Achsentitel je nach Dateninhalt.
     Wenn alle gezeigten Linien nur 'FgR' oder 'FgR_calc' enthalten,
-    wird 'F [%]' gesetzt, sonst 'F [N]'.
+    wird 'F [%]' gesetzt, bei 'φ_yz' wird 'Winkel [°]' gesetzt, sonst 'F [N]'.
     """
     labels = [line.get_label() for line in ax.get_lines()]
     if all("FgR" in label for label in labels):
         ax.set_ylabel("F [%]")
+    elif all("φ_yz" in label for label in labels):
+        ax.set_ylabel("Winkel [°]")
     else:
         ax.set_ylabel("Kräfte [N]")
