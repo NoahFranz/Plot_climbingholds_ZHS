@@ -36,6 +36,30 @@ Zusätzlich werden folgende Spalten ergänzt:
 Rückgabe:
   dict[str, dict[str, dict[str, Any]]]
 """
+def get_flank_time_range(df, schwellwert=15, offset_sec=8):
+    """
+    Gibt das Zeitintervall zurück, in dem gültige Daten liegen,
+    basierend auf Datenflankenerkennung in allen Fy-Spalten.
+    """
+    fy_cols = [col for col in df.columns if "Fy" in col]
+    if not fy_cols:
+        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
+    flank_starts, flank_ends = [], []
+    for col in fy_cols:
+        diffs = np.abs(df[col].diff())
+        diffs = diffs.rolling(window=5, min_periods=1).mean()
+        start_idx = diffs[diffs > schwellwert].first_valid_index()
+        end_idx = diffs[diffs > schwellwert].last_valid_index()
+        if start_idx is not None:
+            flank_starts.append(df.loc[start_idx, "Time [s]"])
+        if end_idx is not None:
+            flank_ends.append(df.loc[end_idx, "Time [s]"])
+    if not flank_starts or not flank_ends:
+        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
+    t_start = max(0, min(flank_starts) - offset_sec)
+    t_end = max(flank_ends) + offset_sec
+    return (t_start, t_end)
+
 def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter):
     data_dict = {}
     filtered_data_dict = {}
@@ -49,9 +73,13 @@ def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter):
         clean_df = clean_data(df)
         g1r = clean_df[["Time [s]"] + [col for col in clean_df.columns if "1" in col]]
         g2l = clean_df[["Time [s]"] + [col for col in clean_df.columns if "2" in col]]
-        # Trimme Daten an der Datenflanke
-        g1r = trim_by_dataflanke(g1r)
-        g2l = trim_by_dataflanke(g2l)
+        # Gemeinsames Zeitintervall für beide Griffe bestimmen
+        start_g1r, end_g1r = get_flank_time_range(g1r)
+        start_g2l, end_g2l = get_flank_time_range(g2l)
+        global_start = max(start_g1r, start_g2l)
+        global_end = min(end_g1r, end_g2l)
+        g1r = g1r[(g1r["Time [s]"] >= global_start) & (g1r["Time [s]"] <= global_end)].reset_index(drop=True)
+        g2l = g2l[(g2l["Time [s]"] >= global_start) & (g2l["Time [s]"] <= global_end)].reset_index(drop=True)
         
         # Angleichung der Längen beider Seiten nach dem Trimmen
         min_len = min(len(g1r), len(g2l))
@@ -82,7 +110,7 @@ def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter):
     
         calc_FgR(data_dict)
         calc_resultant_fy_fz(data_dict)
-        return data_dict if data_dict else None
+    return data_dict if data_dict else None
 
 def calc_FgR(current_dict):
     """
@@ -132,7 +160,7 @@ def calc_resultant_fy_fz(current_dict):
 
 
 # --- Hilfsfunktion: trim_by_dataflanke ---
-def trim_by_dataflanke(df, schwellwert=10, offset_sec=3):
+def trim_by_dataflanke(df, schwellwert=15, offset_sec=3):
     """
     Schneidet alle Daten vor der ersten und nach der letzten erkannten Datenflanke ab.
     Die Datenflanke ist definiert als ein signifikanter Anstieg z.B. in Fy.
