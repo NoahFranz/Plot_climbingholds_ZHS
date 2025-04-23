@@ -14,7 +14,7 @@ def main():
     
     print("forces_to_plot:", forces_to_plot, "holds to plot", holds_to_plot)
  
-    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/T3_16_04_25"
+    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/T5_23_04_25"
     save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
     optional_suffix = file_paths["suffix"] or ""
     optional_suffix = "_" + optional_suffix if optional_suffix else ""
@@ -32,6 +32,8 @@ def main():
     all_lvm_data_dict, forces_g1, forces_g2 = prepare_data(all_lvm_data_dict, forces_to_plot, cutoff)
     if all_lvm_data_dict is None:
         return
+
+    print("\nall_lvm_data_dict keys:", list(all_lvm_data_dict.keys()))
 
     
 

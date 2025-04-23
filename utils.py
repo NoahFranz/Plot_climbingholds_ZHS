@@ -135,7 +135,7 @@ def prepare_data(current_dict, forces_to_plot, cutoff):
 
 def print_current_dict_summary(current_dict):
     for key in current_dict:
-        print("Current_dict AFTER: global y_limits")
+        print("\nCurrent_dict of File")
         print(f"{key} →")
         for hold, content in current_dict[key].items():
             print(f"  {hold}: {list(content.keys())}")
