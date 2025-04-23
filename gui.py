@@ -16,7 +16,25 @@ def run_gui():
     root = tk.Tk()
     root.title("Optionen wählen")
     root.geometry("700x1300")
-    
+
+    # Scrollbares Fenster mit Canvas
+    main_canvas = tk.Canvas(root, borderwidth=0, highlightthickness=0)
+    scrollbar = tk.Scrollbar(root, orient="vertical", command=main_canvas.yview)
+    scrollable_frame = tk.Frame(main_canvas)
+
+    scrollable_frame.bind(
+        "<Configure>",
+        lambda e: main_canvas.configure(
+            scrollregion=main_canvas.bbox("all")
+        )
+    )
+
+    main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    main_canvas.configure(yscrollcommand=scrollbar.set)
+
+    main_canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
+
     # Fenster zentrieren
     window_width = 700
     window_height = 1300
@@ -27,10 +45,10 @@ def run_gui():
     root.geometry(f"{window_width}x{window_height}+{position_right}+{position_top}")
     
     # Frame für Plot-Optionen
-    plot_options_frame = tk.Frame(root)
+    plot_options_frame = tk.Frame(scrollable_frame)
     plot_options_frame.pack(side="top", fill="x")
 
-    submit_frame = tk.Frame(root)
+    submit_frame = tk.Frame(scrollable_frame)
 
     # Option zum Speichern der Plots
     save_plots_var = tk.BooleanVar(value=False)
@@ -43,7 +61,7 @@ def run_gui():
     create_plots_checkbox.pack(side="left", padx=10)
    
     # Option zur Trennung von Normalkräften und Moment in getrennten Plots
-    trim_split_frame = tk.Frame(root)
+    trim_split_frame = tk.Frame(scrollable_frame)
     trim_split_frame.pack(pady=10)
 
     split_fmz_var = tk.BooleanVar(value=False)
@@ -52,7 +70,7 @@ def run_gui():
 
     # Option zum Vergleichen von Kräften pro Griff
     compare_forces_var = tk.BooleanVar(value=False)
-    compare_forces_checkbox = tk.Checkbutton(root, text="Kräfte pro Griff vergleichen?", variable=compare_forces_var)
+    compare_forces_checkbox = tk.Checkbutton(scrollable_frame, text="Kräfte pro Griff vergleichen?", variable=compare_forces_var)
     compare_forces_checkbox.pack(pady=10)
 
     # Option zum Trimmen der Plots
@@ -68,7 +86,7 @@ def run_gui():
     trim_plot_checkbox.pack(in_=trim_split_frame)
 
     # Collapsible Frame für Trim-Optionen
-    trim_frame = tk.LabelFrame(root, text="Trim-Optionen")
+    trim_frame = tk.LabelFrame(scrollable_frame, text="Trim-Optionen")
     
     cutoff_start_var = tk.IntVar(value=0)
     cutoff_end_var = tk.IntVar(value=0)
@@ -85,11 +103,11 @@ def run_gui():
 
     # Option zur verwendung des Savatzgi-Goolay filters
     use_SVG_filter_var = tk.BooleanVar(value=True)
-    use_SVG_filter_checkbox = tk.Checkbutton(root, text="Savatzgi-golay filter verwenden?", variable=use_SVG_filter_var)
+    use_SVG_filter_checkbox = tk.Checkbutton(scrollable_frame, text="Savatzgi-golay filter verwenden?", variable=use_SVG_filter_var)
     use_SVG_filter_checkbox.pack(pady=10)
 
     # Collapsible Frame für Savitzky-Golay Optionen
-    svg_options_frame = tk.LabelFrame(root, text="Savitzky-Golay Optionen")
+    svg_options_frame = tk.LabelFrame(scrollable_frame, text="Savitzky-Golay Optionen")
     svg_options_frame.pack(pady=5, padx=10, fill="x")
 
     window_length_var = tk.IntVar(value=11)
@@ -110,12 +128,12 @@ def run_gui():
         svg_options_visible = not svg_options_visible
         svg_options_frame.pack_forget() if not svg_options_visible else svg_options_frame.pack(pady=5, padx=10, fill="x")
 
-    svg_toggle_button = tk.Button(root, text="Savitzky-Golay Optionen anzeigen/ausblenden", command=toggle_svg_options)
+    svg_toggle_button = tk.Button(scrollable_frame, text="Savitzky-Golay Optionen anzeigen/ausblenden", command=toggle_svg_options)
     svg_toggle_button.pack(pady=10)
     toggle_svg_options()
     
     # Eingabe für Datenordner (für LVM-Dateien)
-    data_folder_frame = tk.LabelFrame(root, text="Datenordner (für LVM-Dateien)")
+    data_folder_frame = tk.LabelFrame(scrollable_frame, text="Datenordner (für LVM-Dateien)")
     data_folder_frame.pack(pady=5, padx=10, fill="x")
     data_folder_var = tk.StringVar()
     data_folder_entry = tk.Entry(data_folder_frame, textvariable=data_folder_var)
@@ -129,7 +147,7 @@ def run_gui():
 
 
     # Eingabe für optionalen Speicherpfad
-    save_folder_frame = tk.LabelFrame(root, text="Speicherordner (optional)")
+    save_folder_frame = tk.LabelFrame(scrollable_frame, text="Speicherordner (optional)")
     save_folder_frame.pack(pady=5, padx=10, fill="x")
     save_folder_var = tk.StringVar()
     save_folder_entry = tk.Entry(save_folder_frame, textvariable=save_folder_var)
@@ -142,14 +160,14 @@ def run_gui():
     browse_button.pack(side="right", padx=5, pady=5)
     
     # Eingabe für Dateinamens-Suffix
-    suffix_frame = tk.LabelFrame(root, text="Datei-Suffix (optional)")
+    suffix_frame = tk.LabelFrame(scrollable_frame, text="Datei-Suffix (optional)")
     suffix_frame.pack(pady=5, padx=10, fill="x")
     suffix_var = tk.StringVar()
     suffix_entry = tk.Entry(suffix_frame, textvariable=suffix_var)
     suffix_entry.pack(fill="x", padx=5, pady=5)
     
     # Griff-Optionen
-    griff_frame = tk.LabelFrame(root, text="Griff")
+    griff_frame = tk.LabelFrame(scrollable_frame, text="Griff")
     griff_frame.pack(pady=10, padx=10, fill="both")
     
     griff_all_var = tk.BooleanVar(value=True)
@@ -179,7 +197,7 @@ def run_gui():
     griff_g2_cb.pack(side="left", padx=5)
     
     # Kräfte-Optionen
-    kraefte_frame = tk.LabelFrame(root, text="Kräfte")
+    kraefte_frame = tk.LabelFrame(scrollable_frame, text="Kräfte")
     kraefte_frame.pack(pady=10, padx=10, fill="both")
     
     # Für G1
@@ -302,7 +320,7 @@ def run_gui():
             save_folder_frame.pack_forget()
             suffix_frame.pack_forget()
 
-    paths_toggle_button = tk.Button(root, text="Dateipfad-Optionen anzeigen/ausblenden", command=toggle_paths_options)
+    paths_toggle_button = tk.Button(scrollable_frame, text="Dateipfad-Optionen anzeigen/ausblenden", command=toggle_paths_options)
     paths_toggle_button.pack(pady=10)
     toggle_paths_options()
 
@@ -325,6 +343,10 @@ def run_gui():
 
     cancel_button = tk.Button(submit_frame, text="Abbrechen", command=cancel)
     cancel_button.pack(side="right", padx=10)
+
+    def _on_mousewheel(event):
+        main_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+    main_canvas.bind_all("<MouseWheel>", _on_mousewheel)
 
     root.mainloop()
     
