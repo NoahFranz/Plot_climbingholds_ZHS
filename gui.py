@@ -113,6 +113,13 @@ def run_gui():
     window_length_var = tk.IntVar(value=11)
     polyorder_var = tk.IntVar(value=5)
 
+    # Checkbox: Kräfte/Momente durch Körpergewicht normieren
+    normalize_by_weight_var = tk.BooleanVar(value=True)
+    normalize_by_weight_checkbox = tk.Checkbutton(
+        scrollable_frame, text="Kräfte/Momente durch Körpergewicht normieren", variable=normalize_by_weight_var
+    )
+    normalize_by_weight_checkbox.pack(pady=10)
+
     tk.Label(svg_options_frame, text="Fensterlänge:").pack(anchor="w", padx=5)
     window_length_entry = tk.Entry(svg_options_frame, textvariable=window_length_var)
     window_length_entry.pack(fill="x", padx=5)
@@ -365,12 +372,14 @@ def run_gui():
         "use_filter": use_SVG_filter_var.get(),
         "window_length": window_length_var.get(),
         "polyorder": polyorder_var.get(),
+        "normalize_by_weight": normalize_by_weight_var.get(),
     }
 
     file_paths = {
         "save_folder": save_folder_var.get(),
         "data_folder": data_folder_var.get(),
-        "suffix": suffix_var.get()
+        "suffix": suffix_var.get(),
+        
     }
 
     cutoff = {

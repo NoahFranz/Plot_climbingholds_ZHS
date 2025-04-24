@@ -138,6 +138,8 @@ def print_current_dict_summary(current_dict):
         print("\nCurrent_dict of File")
         print(f"{key} →")
         for hold, content in current_dict[key].items():
+            if not isinstance(content, dict):
+                continue  # Skip non-dict entries like 'climberforce'
             print(f"  {hold}: {list(content.keys())}")
             print(f"    Spalten: {content['data'].columns.tolist()}")
             print(f"    stats {hold}:")

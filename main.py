@@ -12,15 +12,20 @@ def main():
         return
     plot_settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff = result
     
+    normalizebyweight = filter_settings["normalize_by_weight"]
+    
     print("forces_to_plot:", forces_to_plot, "holds to plot", holds_to_plot)
+    if filter_settings["normalize_by_weight"] == True:
+        print("Forces Normalized by weight")
+    
  
-    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests/T5_23_04_25"
+    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests"
     save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
     optional_suffix = file_paths["suffix"] or ""
     optional_suffix = "_" + optional_suffix if optional_suffix else ""
     optional_suffix += get_force_suffix(forces_to_plot)
 
-    all_lvm_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"], usefilter = filter_settings["use_filter"])
+    all_lvm_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"], usefilter = filter_settings["use_filter"], normalizeByweight = filter_settings["normalize_by_weight"])
 
     if filter_settings["use_filter"]:
         optional_suffix += "_filtered_with-" + str(filter_settings["window_length"]) + "-" + str(filter_settings["polyorder"])
@@ -48,22 +53,22 @@ def main():
         if not plot_settings["split_fmz"] and not plot_settings["compare_forces"]:
             for curr_filename, data_per_file in all_lvm_data_dict.items():
                 print(f"Plotting GL+GR: {curr_filename}")
-                plot_data_per_hold(data_per_file, forces_g1, forces_g2, curr_filename + optional_suffix, save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff)
+                plot_data_per_hold(data_per_file, forces_g1, forces_g2, curr_filename + optional_suffix, save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff, normalizebyweight=normalizebyweight)
         
         # Fall 2: Vergleich der Kräfte pro Griff (kein Split, aber Vergleich aktiviert)
-        elif not plot_settings["split_fmz"] and plot_settings["compargie_forces"]:
+        elif not plot_settings["split_fmz"] and plot_settings["compare_forces"]:
             for filename, file_data in all_lvm_data_dict.items():
-                plot_selected_forces_comparison(file_data, forces_g1, forces_g2, filename=filename + optional_suffix, save_folder=save_folder, save_plot=plot_settings["save"], cutoff=cutoff)
+                plot_selected_forces_comparison(file_data, forces_g1, forces_g2, filename=filename + optional_suffix, save_folder=save_folder, save_plot=plot_settings["save"], cutoff=cutoff, normalizebyweight=normalizebyweight)
         
         # Fall 3: Split-Modus aktiviert – Darstellung für G1 und G2 getrennt
         else:
             for curr_filename, data_per_file in all_lvm_data_dict.items():
                 if holds_to_plot["G2"]:
                     print(f"Plotting G2L splitview: {curr_filename}")
-                    plot_single_hold_splitview(data_per_file["G2L"]["data"], forces_g2, curr_filename + optional_suffix, grip_label="GL", save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff)
+                    plot_single_hold_splitview(data_per_file["G2L"]["data"], forces_g2, curr_filename + optional_suffix, grip_label="links", save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff, normalizebyweight=normalizebyweight)
                 if holds_to_plot["G1"]:
                     print(f"Plotting G1R splitview: {curr_filename}")
-                    plot_single_hold_splitview(data_per_file["G1R"]["data"], forces_g1, curr_filename + optional_suffix, grip_label="GR", save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff)
+                    plot_single_hold_splitview(data_per_file["G1R"]["data"], forces_g1, curr_filename + optional_suffix, grip_label="rechts", save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff, normalizebyweight=normalizebyweight)
 
         # Zeige alle erzeugten Plots
         plt.show()

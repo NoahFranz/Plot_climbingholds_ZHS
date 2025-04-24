@@ -4,9 +4,36 @@ import glob
 from utils import clean_data, get_min_max_values_per_column
 from scipy.signal import savgol_filter
 import numpy as np
+import re
 
 
-"""
+
+def get_flank_time_range(df, schwellwert=15, offset_sec=8):
+    """
+    Gibt das Zeitintervall zurück, in dem gültige Daten liegen,
+    basierend auf Datenflankenerkennung in allen Fy-Spalten.
+    """
+    fy_cols = [col for col in df.columns if "Fy" in col]
+    if not fy_cols:
+        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
+    flank_starts, flank_ends = [], []
+    for col in fy_cols:
+        diffs = np.abs(df[col].diff())
+        diffs = diffs.rolling(window=5, min_periods=1).mean()
+        start_idx = diffs[diffs > schwellwert].first_valid_index()
+        end_idx = diffs[diffs > schwellwert].last_valid_index()
+        if start_idx is not None:
+            flank_starts.append(df.loc[start_idx, "Time [s]"])
+        if end_idx is not None:
+            flank_ends.append(df.loc[end_idx, "Time [s]"])
+    if not flank_starts or not flank_ends:
+        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
+    t_start = max(0, min(flank_starts) - offset_sec)
+    t_end = max(flank_ends) + offset_sec
+    return (t_start, t_end)
+
+def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter, normalizeByweight=False):
+    """
 Lädt .lvm-Dateien aus dem angegebenen Verzeichnis und bereitet sie für die spätere Analyse auf.
 
 Abhängig vom Parameter 'usefilter' wird entweder das gefilterte oder das ungefilterte Dictionary erzeugt.
@@ -36,31 +63,6 @@ Zusätzlich werden folgende Spalten ergänzt:
 Rückgabe:
   dict[str, dict[str, dict[str, Any]]]
 """
-def get_flank_time_range(df, schwellwert=15, offset_sec=8):
-    """
-    Gibt das Zeitintervall zurück, in dem gültige Daten liegen,
-    basierend auf Datenflankenerkennung in allen Fy-Spalten.
-    """
-    fy_cols = [col for col in df.columns if "Fy" in col]
-    if not fy_cols:
-        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
-    flank_starts, flank_ends = [], []
-    for col in fy_cols:
-        diffs = np.abs(df[col].diff())
-        diffs = diffs.rolling(window=5, min_periods=1).mean()
-        start_idx = diffs[diffs > schwellwert].first_valid_index()
-        end_idx = diffs[diffs > schwellwert].last_valid_index()
-        if start_idx is not None:
-            flank_starts.append(df.loc[start_idx, "Time [s]"])
-        if end_idx is not None:
-            flank_ends.append(df.loc[end_idx, "Time [s]"])
-    if not flank_starts or not flank_ends:
-        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
-    t_start = max(0, min(flank_starts) - offset_sec)
-    t_end = max(flank_ends) + offset_sec
-    return (t_start, t_end)
-
-def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter):
     data_dict = {}
     filtered_data_dict = {}
 
@@ -70,6 +72,19 @@ def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter):
         df.columns = df.columns.astype(str)
         df = df.apply(pd.to_numeric, errors='coerce')
         file_name = os.path.splitext(os.path.basename(file_path))[0]
+        kgclimber = None
+        climberforce = None
+        match = re.search(r"_(\d+)kg", file_name)
+        if match:
+            
+            kgclimber = int(match.group(1))
+            climberforce = kgclimber*9.81
+            print("climbersweight ", kgclimber)
+            print("climberforce ", climberforce)
+        else:
+            print(f"⚠️ Kein Gewicht im Dateinamen gefunden für {file_name}.")
+        print("file_name for weight regex:", file_name)
+        #remove U and "comment" colums
         clean_df = clean_data(df)
         g1r = clean_df[["Time [s]"] + [col for col in clean_df.columns if "1" in col]]
         g2l = clean_df[["Time [s]"] + [col for col in clean_df.columns if "2" in col]]
@@ -105,11 +120,25 @@ def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter):
                 "G1R": {"data": g1r, "stats": get_min_max_values_per_column(g1r)},
                 "G2L": {"data": g2l, "stats": get_min_max_values_per_column(g2l)},
             }
+        # Gewicht als Integer im Dict speichern
+        data_dict[file_name]["climberforce"] = climberforce
 
-    # Nur das tatsächlich genutzte Dictionary berechnen/vervollständigen
-    
-        calc_FgR(data_dict)
+        # Falls gewünscht: Normiere alle Kräfte (Fy, Fz, Fx) auf das Kletterergewicht (climberforce)
+        if normalizeByweight:
+            if climberforce is not None and isinstance(climberforce, (int, float)):
+                for side in ["G1R", "G2L"]:
+                    df = data_dict[file_name][side]["data"]
+                    for force_type in ["Fy", "Fz", "Fx", "Mz"]:
+                        force_cols = [col for col in df.columns if force_type in col]
+                        for col in force_cols:
+                            df[col] = df[col] / climberforce
+                            df[col] = df[col] * 100
+            else:
+                print(f"⚠️ Kein gültiges Gewicht für Datei '{file_name}', Normierung wird übersprungen.")
+
+        # calc_FgR(data_dict)
         calc_resultant_fy_fz(data_dict)
+
     return data_dict if data_dict else None
 
 def calc_FgR(current_dict):

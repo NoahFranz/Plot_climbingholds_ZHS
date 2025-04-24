@@ -23,7 +23,7 @@ COLOR_MAPPING = {
     "φ_yz": "#800080"      # Lila
 }
 
-def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", save_plot=False, margin=1.25, save_folder=".", cutoff=None):
+def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", save_plot=False, margin=1.25, save_folder=".", cutoff=None, normalizebyweight=False):
     """
     Erstellt eine Figure für einen einzelnen Griff, in der:
       - Im oberen Subplot die Normalkräfte (alle Spalten außer "Time [s]" und solchen, die "Mz" enthalten) geplottet werden.
@@ -69,7 +69,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
         curret_forcen = next((f for f in COLOR_MAPPING if f in col), None)
         ax_top.plot(time, hold_data[col], label=clean_label(col), color=COLOR_MAPPING.get(curret_forcen))
     ax_top.set_title(f"Kräfte – {grip_label}")
-    ax_top.set_ylabel("F [%]" if only_fgr_in_plot(forces) else "F [N]")
+    set_dynamic_ylabel(ax_top, normalizebyweight=normalizebyweight)
     if normal_cols:
         data_subset = hold_data[normal_cols].dropna()
         ax_top.set_ylim(compute_ylimits(data_subset, margin=margin, fallback=(-100, 1000)))
@@ -96,7 +96,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
 
 # =================================== plot_data_per_hold ====================================
 
-def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=False, margin=1.2, save_folder=".", cutoff=None):
+def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=False, margin=1.2, save_folder=".", cutoff=None, normalizebyweight=False):
     """
     Erstellt eine Figure mit separaten Subplots für den linken (G2L) und rechten Griff (G1R).
     
@@ -170,7 +170,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         time_left = plot_dict["G2L"]["data"]["Time [s]"]
         plot_normal_forces(ax_left, plot_dict["G2L"]["data"], forces_g2, color_mapping)
         ax_left.set_title("GL")
-        ax_left.set_ylabel("F [%]" if only_fgr_in_plot(forces_g2) else "F [N]")
+        set_dynamic_ylabel(ax_left, normalizebyweight=normalizebyweight)
         ax_left.set_ylim([y_min_global, y_max_global])
         # Falls Mz ebenfalls aktiv ist, erstelle eine Sekundäxe und plotte Mz
         mz_cols = [col for col in plot_dict["G2L"]["data"].columns if "Mz" in col]
@@ -198,7 +198,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
             plot_normal_forces(ax_right, plot_dict["G1R"]["data"], forces_g1, color_mapping)
             ax_right.set_title("GR")
             ax_right.set_xlabel("Time [s]")
-            ax_right.set_ylabel("F [%]" if only_fgr_in_plot(forces_g1) else "F [N]")
+            set_dynamic_ylabel(ax_right, normalizebyweight=normalizebyweight)
             ax_right.set_ylim([y_min_global, y_max_global])
             # Falls Mz aktiv ist, plotte zusätzlich Mz auf einer Sekundärachse
             mz_cols = [col for col in plot_dict["G1R"]["data"].columns if "Mz" in col]
@@ -222,7 +222,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
     # plt.show()
 
-def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, save_folder=".", save_plot=False, margin=1.2, cutoff=None):
+def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, save_folder=".", save_plot=False, margin=1.2, cutoff=None, normalizebyweight=False):
     """
     Erstellt Vergleichsplots für die ausgewählten Kräfte der beiden Griffe.
     
@@ -298,13 +298,13 @@ def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, s
     # Top plot axis
     ax_top.set_title(f"Vergleich: {filename}")
     ax_top.set_xlabel("Time [s]")
-    ax_top.set_ylabel("F [%]" if only_fgr_in_plot(allForcesList) else "Kräfte [N]")
+    set_dynamic_ylabel(ax_top, normalizebyweight=normalizebyweight)
     ax_top.set_ylim([y_min_global, y_max_global])
     ax_top.legend(ncol=NCOL)
 
     # Bottom plot Axis
     ax_bottom.set_xlabel("Time [s]")
-    ax_bottom.set_ylabel("F [%]" if only_fgr_in_plot(allForcesList) else "Kräfte [N]")
+    set_dynamic_ylabel(ax_bottom, normalizebyweight=normalizebyweight)
     ax_bottom.legend(ncol=NCOL)
     ax_bottom.set_ylim([y_min_global, y_max_global])
     

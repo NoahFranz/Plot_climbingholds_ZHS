@@ -165,19 +165,23 @@ def only_phi_in_plot(forces):
     """
     return all(force == "φ_yz" for force in forces) if forces else False
 
-def set_dynamic_ylabel(ax):
+def set_dynamic_ylabel(ax, normalizebyweight=False):
     """
     Setzt den y-Achsentitel je nach Dateninhalt.
     Wenn alle gezeigten Linien nur 'FgR' oder 'FgR_calc' enthalten,
-    wird 'F [%]' gesetzt, bei 'φ_yz' wird 'Winkel [°]' gesetzt, sonst 'F [N]'.
+    wird 'F [%]' gesetzt, bei 'φ_yz' wird 'Winkel [°]' gesetzt.
+    Wenn normalizebyweight=True, wird unabhängig von den anderen Kräften 'F [%]' gesetzt.
+    Sonst 'F [N]'.
     """
     labels = [line.get_label() for line in ax.get_lines()]
     if all("FgR" in label for label in labels):
         ax.set_ylabel("F [%]")
     elif all("φ_yz" in label for label in labels):
         ax.set_ylabel("Winkel [°]")
+    elif normalizebyweight:
+        ax.set_ylabel("F [%]")
     else:
-        ax.set_ylabel("Kräfte [N]")
+        ax.set_ylabel("F [N]")
 def export_figure_data_as_mat(fig, filename="figure_export.mat"):
     """
     Exportiert die Daten aller Linien in der übergebenen Matplotlib-Figure als .mat-Datei,
