@@ -154,7 +154,8 @@ def plot_data_per_hold(
     margin: float = 1.2,
     save_folder: str = ".",
     cutoff: Optional[Dict[str, float]] = None,
-    normalizebyweight: bool = False
+    normalizebyweight: bool = False,
+    show_intervals: bool = False
 ) -> None:
     """
     Erstellt eine Figure mit separaten Subplots für den linken (G2L) und rechten Griff (G1R).
@@ -239,6 +240,15 @@ def plot_data_per_hold(
                 mz_df_left = plot_dict["G2L"]["data"][mz_cols]
                 y_min_mz_left, y_max_mz_left = compute_ylimits(mz_df_left, margin=margin)
                 sec_ax_left.set_ylim([y_min_mz_left, y_max_mz_left])
+            # Optional: Interval shading (support multiple intervals per force)
+            if show_intervals:
+                intervals = plot_dict["G2L"].get("intervals", {})
+                for force in forces_g2:
+                    ivals = intervals.get(force, [])
+                    for (t0, t1) in ivals:
+                        ax_left.axvspan(t0, t1,
+                                        color=get_color_for(force, "G2L"),
+                                        alpha=0.15)
             # Kombiniere Legenden von primärer und sekundärer Achse
             combine_legends(ax_left, sec_ax_left, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
         
@@ -274,6 +284,15 @@ def plot_data_per_hold(
                     mz_df_right = plot_dict["G1R"]["data"][mz_cols]
                     y_min_mz_right, y_max_mz_right = compute_ylimits(mz_df_right, margin=margin)
                     sec_ax_right.set_ylim([y_min_mz_right, y_max_mz_right])
+                # Optional: Interval shading (support multiple intervals per force)
+                if show_intervals:
+                    intervals = plot_dict["G1R"].get("intervals", {})
+                    for force in forces_g1:
+                        ivals = intervals.get(force, [])
+                        for (t0, t1) in ivals:
+                            ax_right.axvspan(t0, t1,
+                                             color=get_color_for(force, "G1R"),
+                                             alpha=0.15)
                 combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
         
         # Dynamische Berechnung der Zeitachsen-Grenzen mit 10% Puffer
@@ -300,7 +319,8 @@ def plot_selected_forces_comparison(
     save_plot: bool = False,
     margin: float = 1.2,
     cutoff: Optional[Dict[str, float]] = None,
-    normalizebyweight: bool = False
+    normalizebyweight: bool = False,
+    show_intervals: bool = False
 ) -> None:
     """
     Erstellt Vergleichsplots für die ausgewählten Kräfte der beiden Griffe.
@@ -365,6 +385,21 @@ def plot_selected_forces_comparison(
             ], axis=1)
             y_min_cmp, y_max_cmp = compute_ylimits(df_cmp, margin=margin)
             ax.set_ylim([y_min_cmp, y_max_cmp])
+        # Optional: Interval shading
+        if show_intervals:
+            intervals_g1 = file_dict["G1R"].get("intervals", {})
+            intervals_g2 = file_dict["G2L"].get("intervals", {})
+            # Top axis corresponds to first force
+            force_top = allForcesList[0]
+            if force_top in intervals_g1:
+                t0, t1 = intervals_g1[force_top]
+                axes[0].axvspan(t0, t1, color=get_color_for(force_top, "G1R"), alpha=0.15)
+            # Bottom axis corresponds to second force
+            if len(allForcesList) > 1:
+                force_bot = allForcesList[1]
+                if force_bot in intervals_g2:
+                    t0, t1 = intervals_g2[force_bot]
+                    axes[1].axvspan(t0, t1, color=get_color_for(force_bot, "G2L"), alpha=0.15)
 
         # Top plot axis
         axes[0].set_title(f"Vergleich: {filename}")

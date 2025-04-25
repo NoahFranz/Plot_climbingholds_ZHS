@@ -26,7 +26,7 @@ def main():
     optional_suffix = "_" + optional_suffix if optional_suffix else ""
     optional_suffix += get_force_suffix(forces_to_plot)
 
-    all_lvm_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"], usefilter = filter_settings["use_filter"], normalizeByweight = filter_settings["normalize_by_weight"])
+    all_lvm_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"], usefilter = filter_settings["use_filter"], normalizeByweight = filter_settings["normalize_by_weight"], save_plot=plot_settings["save"])
 
     if filter_settings["use_filter"]:
         optional_suffix += "_filtered_with-" + str(filter_settings["window_length"]) + "-" + str(filter_settings["polyorder"])
@@ -39,37 +39,78 @@ def main():
     if all_lvm_data_dict is None:
         return
 
-    print("\nall_lvm_data_dict keys:", list(all_lvm_data_dict.keys()))
+  #  print("\nall_lvm_data_dict keys:", list(all_lvm_data_dict.keys()))
 
     
-
+    
     # compute globale limits for y_limits and save it with every Hold such that every dataframe can access it
     for filename, file_data in all_lvm_data_dict.items():
         all_lvm_data_dict[filename] = compute_global_ylimits_for_plots(file_data, forces_g1, forces_g2)
-    print_current_dict_summary(current_dict=all_lvm_data_dict)
+  #  print_current_dict_summary(current_dict=all_lvm_data_dict)
 
     # Wenn "Plots erstellen" aktiviert ist:
     if plot_settings["create"]:
+        print("\n --- Plotting ------")    
         # Fall 1: Normale kombinierte Darstellung von G1R und G2L (kein Split, kein Vergleich)
         if not plot_settings["split_fmz"] and not plot_settings["compare_forces"]:
             for curr_filename, data_per_file in all_lvm_data_dict.items():
                 print(f"Plotting GL+GR: {curr_filename}")
-                plot_data_per_hold(data_per_file, forces_g1, forces_g2, curr_filename + optional_suffix, save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff, normalizebyweight=normalizebyweight)
+                plot_data_per_hold(
+                    data_per_file,
+                    forces_g1,
+                    forces_g2,
+                    curr_filename + optional_suffix,
+                    save_plot=plot_settings["save"],
+                    save_folder=save_folder,
+                    cutoff=cutoff,
+                    normalizebyweight=normalizebyweight,
+                    show_intervals=True
+                )
         
         # Fall 2: Vergleich der Kräfte pro Griff (kein Split, aber Vergleich aktiviert)
         elif not plot_settings["split_fmz"] and plot_settings["compare_forces"]:
             for filename, file_data in all_lvm_data_dict.items():
-                plot_selected_forces_comparison(file_data, forces_g1, forces_g2, filename=filename + optional_suffix, save_folder=save_folder, save_plot=plot_settings["save"], cutoff=cutoff, normalizebyweight=normalizebyweight)
+                plot_selected_forces_comparison(
+                    file_data,
+                    forces_g1,
+                    forces_g2,
+                    filename=filename + optional_suffix,
+                    save_folder=save_folder,
+                    save_plot=plot_settings["save"],
+                    cutoff=cutoff,
+                    normalizebyweight=normalizebyweight,
+                    show_intervals=True
+                )
         
         # Fall 3: Split-Modus aktiviert – Darstellung für G1 und G2 getrennt
         else:
             for curr_filename, data_per_file in all_lvm_data_dict.items():
                 if holds_to_plot["G2"]:
                     print(f"Plotting G2L splitview: {curr_filename}")
-                    plot_single_hold_splitview(data_per_file["G2L"]["data"], forces_g2, curr_filename + optional_suffix, grip_label="links", save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff, normalizebyweight=normalizebyweight)
+                    plot_single_hold_splitview(
+                        data_per_file["G2L"]["data"],
+                        forces_g2,
+                        curr_filename + optional_suffix,
+                        grip_label="links",
+                        save_plot=plot_settings["save"],
+                        save_folder=save_folder,
+                        cutoff=cutoff,
+                        normalizebyweight=normalizebyweight,
+                        show_intervals=True
+                    )
                 if holds_to_plot["G1"]:
                     print(f"Plotting G1R splitview: {curr_filename}")
-                    plot_single_hold_splitview(data_per_file["G1R"]["data"], forces_g1, curr_filename + optional_suffix, grip_label="rechts", save_plot=plot_settings["save"], save_folder=save_folder, cutoff=cutoff, normalizebyweight=normalizebyweight)
+                    plot_single_hold_splitview(
+                        data_per_file["G1R"]["data"],
+                        forces_g1,
+                        curr_filename + optional_suffix,
+                        grip_label="rechts",
+                        save_plot=plot_settings["save"],
+                        save_folder=save_folder,
+                        cutoff=cutoff,
+                        normalizebyweight=normalizebyweight,
+                        show_intervals=True
+                    )
 
         # Zeige alle erzeugten Plots
         plt.show()

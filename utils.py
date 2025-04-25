@@ -1,4 +1,7 @@
 import tkinter as tk
+from typing import Dict, List, Optional, Tuple
+import pandas as pd
+import numpy as np
 def clean_data(df):
     """
     Entfernt alle Spalten, die ein 'U' im Namen oder 'Comment' enthalten.
@@ -152,3 +155,177 @@ def print_current_dict_summary(current_dict):
                 print(f"    global_limits: min= {gl['global_y_min']:.2f}, max= {gl['global_y_max']:.2f}")
             else:
                 print("    global_limits: Nicht gesetzt")
+
+
+def _find_active_segment(time: pd.Series, mask: pd.Series, min_duration: float) -> Optional[Tuple[float, float]]:
+    """
+    Hilfsfunktion: Findet das erste Segment, in dem mask=True für mindestens min_duration Sekunden.
+    Gibt (t_start, t_end) zurück oder None.
+    """
+    # Kennzeichne Gruppen zusammenhängender True/False-Werte
+    grp = (mask != mask.shift()).cumsum()
+    # Erstelle DataFrame mit explizit benannter Mask-Spalte
+    df_seg = pd.concat([
+        time.rename(time.name),
+        mask.rename("mask"),
+        grp.rename("grp")
+    ], axis=1)
+    # Suche das erste True-Segment mit ausreichender Dauer
+    for _, g in df_seg.groupby("grp"):
+        if g["mask"].iloc[0]:
+            duration = g[time.name].iloc[-1] - g[time.name].iloc[0]
+            if duration >= min_duration:
+                return (g[time.name].iloc[0], g[time.name].iloc[-1])
+    return None
+def _find_last_active_segment(time: pd.Series,
+                              mask: pd.Series,
+                              min_duration: float) -> Optional[Tuple[float, float]]:
+    """
+    Findet das letzte Segment, in dem mask==True für mindestens min_duration Sekunden.
+    """
+    # Gruppen für zusammenhängende True/False
+    grp = (mask != mask.shift()).cumsum()
+    last_valid = None
+    # iteriere über Gruppen
+    df = pd.concat([time, mask.rename("m"), grp.rename("grp")], axis=1)
+    for _, g in df.groupby("grp"):
+        if g["m"].iloc[0]:
+            dur = g[time.name].iloc[-1] - g[time.name].iloc[0]
+            if dur >= min_duration:
+                last_valid = (g[time.name].iloc[0], g[time.name].iloc[-1])
+    return last_valid
+
+def get_force_intervals(
+    df: pd.DataFrame,
+    forces: List[str],
+    # Optional single absolute threshold for both start and end
+    threshold: Optional[float] = None,
+    start_frac: float = 0.05,
+    start_dur: float = 0.1,
+    end_frac: float = 0.05,
+    end_dur: float = 0.1,
+    time_col: str = "Time [s]",
+    start_threshold: Optional[float] = None,
+    end_threshold: Optional[float] = None
+) -> Dict[str, Tuple[float, float]]:
+    """
+    Bestimmt für jede Kraft in `forces` das Aktivitätsintervall:
+      - Start: erstes Segment ≥ (threshold oder start_frac*max) für mind. start_dur s.
+      - Ende: erstes Segment < (threshold oder end_frac*max) für mind. end_dur s.
+
+    Rückgabe:
+      { 'Fy': (t0, t1), 'Fx': (t0, t1), ... }
+    """
+    # Default hardcoded thresholds & force set (for quick tests)
+    start_threshold = 1.3
+    end_threshold = 1
+    forces = {"Fz"}
+    intervals = {}
+    time = df[time_col]
+    # If a single threshold is given, override only the start threshold
+    if threshold is not None:
+        start_threshold = threshold
+
+    for force in forces:
+        # max-Wert über alle Spalten dieser Kraft
+        cols = [c for c in df.columns if force in c]
+        if not cols:
+            continue
+        series = df[cols].max(axis=1)
+        # Determine start/end thresholds: use absolute threshold if provided, else fraction of max
+        threshold_start = (
+            start_threshold if start_threshold is not None
+            else series.max() * start_frac
+        )
+        threshold_end = (
+            end_threshold if end_threshold is not None
+            else series.max() * end_frac
+        )
+
+        # Build masks: start = rising above start_threshold; end = falling to/below end_threshold
+        mask_start = series > threshold_start
+        mask_end   = series <= threshold_end
+
+        # Find all rising-edge indices where an interval could start
+        start_edges = mask_start & ~mask_start.shift(fill_value=False)
+        start_idxs = time.index[start_edges]
+
+        force_intervals = []
+        for start_idx in start_idxs:
+            t0 = time.loc[start_idx]
+            # Only consider end after t0
+            mask_end_after = mask_end & (time >= t0)
+            if mask_end_after.any():
+                end_idx = mask_end_after[mask_end_after].index[0]
+                t1 = time.loc[end_idx]
+            else:
+                t1 = time.iloc[-1]
+            # Accept only intervals where duration ≥ end_dur
+            if (t1 - t0) >= end_dur:
+                force_intervals.append((t0, t1))
+        intervals[force] = force_intervals
+
+    return intervals
+
+
+def compute_impulses(
+    df: pd.DataFrame,
+    intervals: dict,
+    forces: list,
+    time_col: str = "Time [s]"
+) -> dict:
+    """
+    Berechnet den Impuls (Integral über Kraft·Zeit) für jede Kraft im gegebenen Intervall.
+    
+    Parameters:
+      df         : DataFrame mit Time- und Kraftspalten
+      intervals  : dict mapping Kraftname → (t_start, t_end)
+      forces     : Liste der Kraftstichworte (z.B. ["Fy","Fx","Fz","Mz"])
+      time_col   : Name der Zeitspalte (Default "Time [s]")
+    
+    Returns:
+      impulses : dict mapping Kraftname → Impuls [N·s] bzw. [%·s] (je nach Normierung)
+    """
+    print("calculating impulses")
+    impulses = {}
+    for force in forces:
+        if force not in intervals:
+            continue
+        t0, t1 = intervals[force]
+        # Subset des DataFrames auf das Intervall
+        mask = (df[time_col] >= t0) & (df[time_col] <= t1)
+        t_vals = df.loc[mask, time_col].values
+        # Summiere ggf. mehrere Spalten (Sensorkanäle) auf Zeilenebene
+        force_cols = [c for c in df.columns if force in c]
+        if not force_cols or len(t_vals) < 2:
+            impulses[force] = 0.0
+            continue
+        f_vals = df.loc[mask, force_cols].sum(axis=1).values
+        imp = float(np.trapz(f_vals, t_vals))
+        impulses[force] = imp
+        # Debug: print each force's impulse
+        print(f"[compute_impulses] {force}: Impuls = {imp:.2f}")
+    return impulses
+
+def compute_impulses_per_interval(
+    df: pd.DataFrame,
+    intervals: list,
+    force: str,
+    time_col: str = "Time [s]"
+) -> list:
+    """
+    Berechnet den Impuls (Integral über Kraft·Zeit) für jedes Intervall in `intervals`.
+    """
+    impulses = []
+    for t0, t1 in intervals:
+        mask = (df[time_col] >= t0) & (df[time_col] <= t1)
+        t_vals = df.loc[mask, time_col].values
+        cols = [c for c in df.columns if force in c]
+        if not cols or len(t_vals) < 2:
+            impulses.append(0.0)
+            continue
+        f_vals = df.loc[mask, cols].sum(axis=1).values
+        imp = float(np.trapz(f_vals, t_vals))
+        imp = round(imp, 1)
+        impulses.append(imp)
+    return impulses

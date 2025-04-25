@@ -2,6 +2,7 @@ import pandas as pd
 import os
 import glob
 from utils import clean_data, get_min_max_values_per_column
+from utils import get_force_intervals, compute_impulses_per_interval
 from scipy.signal import savgol_filter
 import numpy as np
 import re
@@ -20,9 +21,9 @@ def get_flank_time_range(df, schwellwert=10, offset_sec=4):
     for col in fy_cols:
         diffs = np.abs(df[col].diff())
         diffs = diffs.rolling(window=5, min_periods=1).mean()
-                # Debug: max diff vs. threshold
+        # Debug: max diff vs. threshold in get_flank_time_range
         max_diff = diffs.max()
-        print(f"[trim_by_dataflanke] Spalte '{col}': max diff = {max_diff:.3f}, schwellwert = {schwellwert}")
+        print(f"[get_flank_time_range] Spalte '{col}': max diff = {max_diff:.3f}, schwellwert = {schwellwert}")
         start_idx = diffs[diffs > schwellwert].first_valid_index()
         end_idx = diffs[diffs > schwellwert].last_valid_index()
         if start_idx is not None:
@@ -35,7 +36,7 @@ def get_flank_time_range(df, schwellwert=10, offset_sec=4):
     t_end = max(flank_ends) + offset_sec
     return (t_start, t_end)
 
-def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter, normalizeByweight=False):
+def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter, normalizeByweight=False, save_plot= bool):
     """
 Lädt .lvm-Dateien aus dem angegebenen Verzeichnis und bereitet sie für die spätere Analyse auf.
 
@@ -142,6 +143,83 @@ Rückgabe:
         # calc_FgR(data_dict)
         calc_resultant_fy_fz(data_dict)
 
+    # Berechne und speichere die Aktivitätsintervalle für jede Kraft pro Griff
+    force_keys = ["Fy", "Fx", "Fz", "Mz"]
+    for fname, file_data in data_dict.items():
+        intervals_g1 = get_force_intervals(file_data["G1R"]["data"], force_keys)
+        # Debug: Print intervals for G1R (multiple intervals per force)
+        print(f"[Intervalle] Datei '{fname}' G1R:")
+        for force, ivals in intervals_g1.items():
+            if not ivals:
+                print(f"  {force}: keine Intervalle gefunden")
+            else:
+                for idx, (t0, t1) in enumerate(ivals):
+                    print(f"  {force} [{idx}]: Start = {t0:.2f}s, Ende = {t1:.2f}s")
+        file_data["G1R"]["intervals"] = intervals_g1
+        intervals_g2 = get_force_intervals(file_data["G2L"]["data"], force_keys)
+        # Debug: Print intervals for G2L (multiple intervals per force)
+        print(f"[Intervalle] Datei '{fname}' G2L:")
+        for force, ivals in intervals_g2.items():
+            if not ivals:
+                print(f"  {force}: keine Intervalle gefunden")
+            else:
+                for idx, (t0, t1) in enumerate(ivals):
+                    print(f"  {force} [{idx}]: Start = {t0:.2f}s, Ende = {t1:.2f}s")
+        file_data["G2L"]["intervals"] = intervals_g2
+
+        # Impuls-Berechnung pro Griff für jedes erkannte Intervall
+        # G1R: compute impulses per interval per force
+        impulses_dict_g1 = {}
+        for force, ivals in intervals_g1.items():
+            # berechne Impulse aller Kräfte in diesen Intervallen
+            per_comp = {}
+            for comp in force_keys:
+                per_comp[comp] = compute_impulses_per_interval(
+                    file_data["G1R"]["data"], ivals, comp
+                )
+            impulses_dict_g1[force] = per_comp
+            print(f"[Impuls-Intervalle] Datei '{fname}' G1R {force}: {per_comp}")
+        file_data["G1R"]["impulses"] = impulses_dict_g1
+
+        # G2L: compute impulses per interval per force
+        impulses_dict_g2 = {}
+        for force, ivals in intervals_g2.items():
+            # berechne Impulse aller Kräfte in diesen Intervallen
+            per_comp = {}
+            for comp in force_keys:
+                per_comp[comp] = compute_impulses_per_interval(
+                    file_data["G2L"]["data"], ivals, comp
+                )
+            impulses_dict_g2[force] = per_comp
+            print(f"[Impuls-Intervalle] Datei '{fname}' G2L {force}: {per_comp}")
+        file_data["G2L"]["impulses"] = impulses_dict_g2
+
+        if save_plot:
+            # --- Export impulse data to text file ---
+            txt_path = os.path.join(folder_path, f"{fname}_impulses.txt")
+            try:
+                with open(txt_path, "w") as f:
+                    f.write(f"Impulsdaten für Datei '{fname}'\n")
+                    for side in ["G1R", "G2L"]:
+                        f.write(f"\n{side}:\n")
+                        # Intervalle ausgeben
+                        intervals_side = file_data[side].get("intervals", {})
+                        for force_name, ivals in intervals_side.items():
+                            if ivals:
+                                ivals_str = ", ".join(f"({t0:.2f}-{t1:.2f}s)" for t0, t1 in ivals)
+                            else:
+                                ivals_str = "keine Intervalle"
+                            f.write(f"  {force_name} Intervalle: {ivals_str}\n")
+                            # Impulse pro Komponente ausgeben
+                            impulses_side = file_data[side]["impulses"].get(force_name, {})
+                            for comp, vals in impulses_side.items():
+                                vals_str = ", ".join(f"{v:.1f}" for v in vals)
+                                f.write(f"    {comp}: [{vals_str}]\n")
+                print(f"Impulsdaten gespeichert in: {txt_path}")
+            except Exception as e:
+                print(f"Fehler beim Schreiben der Impulsdatei '{txt_path}': {e}")
+            
+
     return data_dict if data_dict else None
 
 def calc_FgR(current_dict):
@@ -189,51 +267,3 @@ def calc_resultant_fy_fz(current_dict):
 
                 df.loc[:, "Fres"] = fres
                 df.loc[:, "φ_yz"] = phiyz
-
-
-# --- Hilfsfunktion: trim_by_dataflanke ---
-def trim_by_dataflanke(df, schwellwert=1000, offset_sec=3):
-    """
-    Schneidet alle Daten vor der ersten und nach der letzten erkannten Datenflanke ab.
-    Die Datenflanke ist definiert als ein signifikanter Anstieg z.B. in Fy.
-    Es bleiben nur Daten im Intervall (t_start - offset_sec) bis (t_ende + offset_sec) erhalten.
-    Falls mehrere Fy-Spalten vorhanden sind, wird der früheste Startzeitpunkt und späteste Endzeitpunkt berücksichtigt.
-
-    Parameter:
-        df : DataFrame mit 'Time [s]' und mindestens einer Kraftspalte
-        schwellwert : float – minimale Änderung, um eine Flanke zu erkennen
-        offset_sec : float – Zeit in Sekunden als Puffer vor und nach den Flanken
-
-    Rückgabe:
-        getrimmter DataFrame
-    """
-    print("auto_trim: detecting flanks")
-    fy_cols = [col for col in df.columns if "Fy" in col]
-    if not fy_cols:
-        return df  # keine Fy-Spalte vorhanden
-
-    flank_starts = []
-    flank_ends = []
-
-    for col in fy_cols:
-        diffs = np.abs(df[col].diff())
-        diffs = diffs.rolling(window=5, min_periods=1).mean()
-        # Debug: max diff vs. threshold
-        max_diff = diffs.max()
-        print(f"[trim_by_dataflanke] Spalte '{col}': max diff = {max_diff:.3f}, schwellwert = {schwellwert}")
-
-        start_idx = diffs[diffs > schwellwert].first_valid_index()
-        end_idx = diffs[diffs > schwellwert].last_valid_index()
-
-        if start_idx is not None:
-            flank_starts.append(df.loc[start_idx, "Time [s]"])
-        if end_idx is not None:
-            flank_ends.append(df.loc[end_idx, "Time [s]"])
-
-    if not flank_starts or not flank_ends:
-        return df  # keine gültige Flanke gefunden
-
-    t_start = max(0, min(flank_starts) - offset_sec)
-    t_end = max(flank_ends) + offset_sec
-
-    return df[(df["Time [s]"] >= t_start) & (df["Time [s]"] <= t_end)].reset_index(drop=True)
