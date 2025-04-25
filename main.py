@@ -64,7 +64,7 @@ def main():
                     save_folder=save_folder,
                     cutoff=cutoff,
                     normalizebyweight=normalizebyweight,
-                    show_intervals=True
+                    show_intervals=plot_settings["show_impulses"]
                 )
         
         # Fall 2: Vergleich der Kräfte pro Griff (kein Split, aber Vergleich aktiviert)
@@ -79,7 +79,7 @@ def main():
                     save_plot=plot_settings["save"],
                     cutoff=cutoff,
                     normalizebyweight=normalizebyweight,
-                    show_intervals=True
+                    show_intervals=["show_impulses"]
                 )
         
         # Fall 3: Split-Modus aktiviert – Darstellung für G1 und G2 getrennt
@@ -96,7 +96,7 @@ def main():
                         save_folder=save_folder,
                         cutoff=cutoff,
                         normalizebyweight=normalizebyweight,
-                        show_intervals=True
+                        show_intervals=["show_impulses"]
                     )
                 if holds_to_plot["G1"]:
                     print(f"Plotting G1R splitview: {curr_filename}")
@@ -109,7 +109,7 @@ def main():
                         save_folder=save_folder,
                         cutoff=cutoff,
                         normalizebyweight=normalizebyweight,
-                        show_intervals=True
+                        show_intervals=["show_impulses"]
                     )
 
         # Zeige alle erzeugten Plots

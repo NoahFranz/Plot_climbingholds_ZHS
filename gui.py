@@ -59,6 +59,11 @@ def run_gui():
     create_plots_var = tk.BooleanVar(value=True)
     create_plots_checkbox = tk.Checkbutton(plot_options_frame, text="Plots erstellen", variable=create_plots_var)
     create_plots_checkbox.pack(side="left", padx=10)
+
+    # Option für Impuls-Berechnung anzeigen
+    show_impulses_var = tk.BooleanVar(value=False)
+    show_impulses_checkbox = tk.Checkbutton(scrollable_frame, text="Impuls anzeigen", variable=show_impulses_var)
+    show_impulses_checkbox.pack(pady=5)
    
     # Option zur Trennung von Normalkräften und Moment in getrennten Plots
     trim_split_frame = tk.Frame(scrollable_frame)
@@ -358,6 +363,7 @@ def run_gui():
         "save": save_plots_var.get(),
         "split_fmz": split_fmz_var.get(),
         "compare_forces": compare_forces_var.get(),
+        "show_impulses": show_impulses_var.get()
     }
 
     filter_settings = {
