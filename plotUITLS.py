@@ -2,6 +2,7 @@ from scipy.io import savemat
 import matplotlib.pyplot as plt
 import pandas as pd
 import math
+import os
 
 DEFAULT_FIGSIZE = (6.3, 8)
 
@@ -44,6 +45,8 @@ def apply_default_plot_style(fig, normalizebyweight=False):
 
         # Dynamisches y-Label
         set_dynamic_ylabel(ax, normalizebyweight=normalizebyweight)
+        # Erhöhe den Abstand des y-Achsentitels, damit er nicht abgeschnitten wird
+        ax.yaxis.labelpad = 1
 
         # Legendenstil
         legend = ax.get_legend()
@@ -70,6 +73,11 @@ def apply_default_plot_style(fig, normalizebyweight=False):
             sec_ax.set_ylim([-5, 90])
             combine_legends(ax, sec_ax, loc="upper left", ncol=5)
 
+    # Passe das Layout an, damit Achsentitel und Suptitle nicht abgeschnitten werden
+    fig.tight_layout()
+    # Optional: Erweitere den linken Rand bei Bedarf
+    fig.subplots_adjust(left=0.09)
+
 def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle="", save_folder="."):
     """
     Setzt den Figure-Titel auf einen eindeutigen Namen, der aus 'filename' und 'grip_label'
@@ -84,16 +92,12 @@ def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle=
         # Einzelne Subplot-Titel und Suptitle entfernen, falls gespeichert wird
         #for ax in fig.get_axes():
         #    ax.set_title("")
-        
-        plt.tight_layout()
-        import os
         full_path = os.path.join(save_folder, safe_name)
         fig.savefig(full_path)
         print(f"Plot gespeichert unter: {full_path}")
     else:
         fig.suptitle(safe_name, fontsize=14)
         fig._suptitle = safe_name
-        plt.tight_layout()
 
 def plot_normal_forces(ax, hold_data, forces, color_mapping):
     """

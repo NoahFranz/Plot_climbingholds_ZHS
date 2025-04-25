@@ -8,7 +8,7 @@ import re
 
 
 
-def get_flank_time_range(df, schwellwert=15, offset_sec=8):
+def get_flank_time_range(df, schwellwert=10, offset_sec=4):
     """
     Gibt das Zeitintervall zurück, in dem gültige Daten liegen,
     basierend auf Datenflankenerkennung in allen Fy-Spalten.
@@ -20,6 +20,9 @@ def get_flank_time_range(df, schwellwert=15, offset_sec=8):
     for col in fy_cols:
         diffs = np.abs(df[col].diff())
         diffs = diffs.rolling(window=5, min_periods=1).mean()
+                # Debug: max diff vs. threshold
+        max_diff = diffs.max()
+        print(f"[trim_by_dataflanke] Spalte '{col}': max diff = {max_diff:.3f}, schwellwert = {schwellwert}")
         start_idx = diffs[diffs > schwellwert].first_valid_index()
         end_idx = diffs[diffs > schwellwert].last_valid_index()
         if start_idx is not None:
@@ -189,7 +192,7 @@ def calc_resultant_fy_fz(current_dict):
 
 
 # --- Hilfsfunktion: trim_by_dataflanke ---
-def trim_by_dataflanke(df, schwellwert=15, offset_sec=3):
+def trim_by_dataflanke(df, schwellwert=1000, offset_sec=3):
     """
     Schneidet alle Daten vor der ersten und nach der letzten erkannten Datenflanke ab.
     Die Datenflanke ist definiert als ein signifikanter Anstieg z.B. in Fy.
@@ -204,6 +207,7 @@ def trim_by_dataflanke(df, schwellwert=15, offset_sec=3):
     Rückgabe:
         getrimmter DataFrame
     """
+    print("auto_trim: detecting flanks")
     fy_cols = [col for col in df.columns if "Fy" in col]
     if not fy_cols:
         return df  # keine Fy-Spalte vorhanden
@@ -214,6 +218,9 @@ def trim_by_dataflanke(df, schwellwert=15, offset_sec=3):
     for col in fy_cols:
         diffs = np.abs(df[col].diff())
         diffs = diffs.rolling(window=5, min_periods=1).mean()
+        # Debug: max diff vs. threshold
+        max_diff = diffs.max()
+        print(f"[trim_by_dataflanke] Spalte '{col}': max diff = {max_diff:.3f}, schwellwert = {schwellwert}")
 
         start_idx = diffs[diffs > schwellwert].first_valid_index()
         end_idx = diffs[diffs > schwellwert].last_valid_index()

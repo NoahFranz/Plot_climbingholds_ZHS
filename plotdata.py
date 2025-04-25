@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import math
 from plotUITLS import*
+from plotUITLS import compute_ylimits
 from matplotlib.colors import to_rgb
 from typing import List, Dict, Any, Optional, Tuple, Union
 
@@ -40,6 +41,7 @@ def _plot_force_lines(ax: plt.Axes, df: pd.DataFrame, forces: List[str],
     """
     Plottet alle Spalten aus df, deren Name einen Eintrag in forces enthält.
     """
+    print("executing: _plo_data_force_lines")
     time = df["Time [s]"]
     for force in forces:
         cols = [col for col in df.columns if force in col]
@@ -135,7 +137,7 @@ def plot_single_hold_splitview(
         ax_bottom.legend(loc="upper right", ncol=PLOT_CONFIG["legend_ncol"])
         
         # Setze den eindeutigen Titel und speichere optional
-        apply_default_plot_style(fig, normalizebyweight=normalizebyweight, figsize=PLOT_CONFIG["default_figsize"])
+        apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
         if save_plot:
             save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
     except Exception as e:
@@ -182,6 +184,7 @@ def plot_data_per_hold(
         cutoff : dict or None
             Dictionary mit "start" und "end" in Sekunden für die Trimmung.
     """
+    print("executing: plo_data_per_hold")
     try:
         figstyle = "2G"
         grip_label = "OL_UR"
@@ -193,9 +196,6 @@ def plot_data_per_hold(
         only_mz_g1 = forces_g1 == ["Mz"]
         only_mz_g2 = forces_g2 == ["Mz"]
 
-        # Verwende direkt die vorab berechneten globalen Y-Grenzen
-        y_min_global = plot_dict["G2L"]["global_limits"]["global_y_min"]
-        y_max_global = plot_dict["G2L"]["global_limits"]["global_y_max"]
 
         # Überprüfe, ob für einen Griff überhaupt Kräfte vorhanden sind (um Achsen zu bestimmen)
         has_g1 = bool(forces_g1)
@@ -207,10 +207,6 @@ def plot_data_per_hold(
         fig, axes = plt.subplots(num_axes, 1, figsize=(6.3, fig_height), sharex=True)
         axes = [axes] if num_axes == 1 else axes
 
-        # Setze die Achsenlimits für beide Subplots
-        axes[0].set_ylim([y_min_global, y_max_global])
-        if has_g1:
-            axes[1].set_ylim([y_min_global, y_max_global])
 
         # ----- Linker Griff (G2L) -----
         if only_mz_g2:
@@ -228,13 +224,21 @@ def plot_data_per_hold(
             time_left = plot_dict["G2L"]["data"]["Time [s]"]
             plot_normal_forces(ax_left, plot_dict["G2L"]["data"], forces_g2, color_mapping)
             ax_left.set_title("GL")
-            ax_left.set_ylim([y_min_global, y_max_global])
+            # Nach Plotten der Normalkräfte: lokale y-Limits berechnen
+            data_left = plot_dict["G2L"]["data"][[col for col in plot_dict["G2L"]["data"].columns if any(f in col for f in forces_g2)]]
+            y_min_left, y_max_left = compute_ylimits(data_left, margin=margin)
+            ax_left.set_ylim([y_min_left, y_max_left])
             # Falls Mz ebenfalls aktiv ist, erstelle eine Sekundäxe und plotte Mz
             mz_cols = [col for col in plot_dict["G2L"]["data"].columns if "Mz" in col]
             sec_ax_left = None
             if mz_cols and "Mz" in forces_g2:
                 sec_ax_left = ax_left.twinx()
+                # Plot Mz-Daten auf Sekundärachse
                 plot_mz_on_secondary_axis(sec_ax_left, time_left, plot_dict["G2L"]["data"], mz_cols)
+                # Eigene y-Limits für den Moment basierend auf compute_ylimits
+                mz_df_left = plot_dict["G2L"]["data"][mz_cols]
+                y_min_mz_left, y_max_mz_left = compute_ylimits(mz_df_left, margin=margin)
+                sec_ax_left.set_ylim([y_min_mz_left, y_max_mz_left])
             # Kombiniere Legenden von primärer und sekundärer Achse
             combine_legends(ax_left, sec_ax_left, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
         
@@ -255,13 +259,21 @@ def plot_data_per_hold(
                 plot_normal_forces(ax_right, plot_dict["G1R"]["data"], forces_g1, color_mapping)
                 ax_right.set_title("GR")
                 ax_right.set_xlabel("Time [s]")
-                ax_right.set_ylim([y_min_global, y_max_global])
+                # Nach Plotten der Normalkräfte: lokale y-Limits berechnen
+                data_right = plot_dict["G1R"]["data"][[col for col in plot_dict["G1R"]["data"].columns if any(f in col for f in forces_g1)]]
+                y_min_right, y_max_right = compute_ylimits(data_right, margin=margin)
+                ax_right.set_ylim([y_min_right, y_max_right])
                 # Falls Mz aktiv ist, plotte zusätzlich Mz auf einer Sekundärachse
                 mz_cols = [col for col in plot_dict["G1R"]["data"].columns if "Mz" in col]
                 sec_ax_right = None
                 if mz_cols and "Mz" in forces_g1:
                     sec_ax_right = ax_right.twinx()
+                    # Plot Mz-Daten auf Sekundärachse
                     plot_mz_on_secondary_axis(sec_ax_right, time_right, plot_dict["G1R"]["data"], mz_cols)
+                    # Eigene y-Limits für den Moment basierend auf compute_ylimits
+                    mz_df_right = plot_dict["G1R"]["data"][mz_cols]
+                    y_min_mz_right, y_max_mz_right = compute_ylimits(mz_df_right, margin=margin)
+                    sec_ax_right.set_ylim([y_min_mz_right, y_max_mz_right])
                 combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
         
         # Dynamische Berechnung der Zeitachsen-Grenzen mit 10% Puffer
@@ -273,7 +285,7 @@ def plot_data_per_hold(
             axes[1].set_xlim([time_min - 0.01 * time_range, time_max + 0.05 * time_range])
         
         plt.tight_layout()
-        apply_default_plot_style(fig, normalizebyweight=normalizebyweight, figsize=PLOT_CONFIG["default_figsize"])
+        apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
         if save_plot:
             save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
     except Exception as e:
@@ -315,6 +327,7 @@ def plot_selected_forces_comparison(
       cutoff : dict or None
           Dictionary mit "start" und "end" in Sekunden für die Trimmung.
     """
+    print("executing: plo_selected_forces_comparison")
     try:
         time = file_dict["G1R"]["data"]["Time [s]"]
         holdNameList = {"G1R", "G2L"}
@@ -340,22 +353,29 @@ def plot_selected_forces_comparison(
                 df = file_dict[current_hold]["data"]
                 _plot_force_lines(ax, df, [current_force], COLOR_MAPPING, alpha=alpha, suffix=suffix)
 
-        # Verwende direkt die vorab berechneten globalen Y-Grenzen
-        y_min_global = file_dict["G1R"]["global_limits"]["global_y_min"]
-        y_max_global = file_dict["G1R"]["global_limits"]["global_y_max"]
+        # Lokale y-Limits für Vergleichsplots berechnen
+        for idx, current_force in enumerate(allForcesList[:2]):
+            ax = axes_list[idx]
+            # Sammle Daten beider Griffe für diese Kraft
+            cols_g1 = [c for c in file_dict["G1R"]["data"].columns if current_force in c]
+            cols_g2 = [c for c in file_dict["G2L"]["data"].columns if current_force in c]
+            df_cmp = pd.concat([
+                file_dict["G1R"]["data"][cols_g1],
+                file_dict["G2L"]["data"][cols_g2]
+            ], axis=1)
+            y_min_cmp, y_max_cmp = compute_ylimits(df_cmp, margin=margin)
+            ax.set_ylim([y_min_cmp, y_max_cmp])
 
         # Top plot axis
         axes[0].set_title(f"Vergleich: {filename}")
         axes[0].set_xlabel("Time [s]")
-        axes[0].set_ylim([y_min_global, y_max_global])
         axes[0].legend(ncol=PLOT_CONFIG["legend_ncol"])
 
         # Bottom plot Axis
         axes[1].set_xlabel("Time [s]")
         axes[1].legend(ncol=PLOT_CONFIG["legend_ncol"])
-        axes[1].set_ylim([y_min_global, y_max_global])
         
-        apply_default_plot_style(fig=fig, normalizebyweight=normalizebyweight, figsize=PLOT_CONFIG["default_figsize"])
+        apply_default_plot_style(fig=fig, normalizebyweight=normalizebyweight)
         if save_plot:
             plt.savefig(f"{save_folder}/{filename}.png")
         plt.show()
