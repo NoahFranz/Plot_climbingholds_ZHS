@@ -10,6 +10,20 @@ def adjust_color(color, shift=0.2):
     g = max(0, min(1, g + shift / 2))
     b = max(0, min(1, b + shift))
     return (r, g, b)
+
+def get_color_for(force, hold):
+    """
+    Wählt eine Farbe für 'force' und 'hold' basierend auf COLOR_MAPPING.
+    Für G2L wird die Basisfarbe leicht angepasst.
+    """
+    # Bestimme Basisschlüssel aus COLOR_MAPPING
+    base_key = next((f for f in COLOR_MAPPING if f in force), None)
+    base_color = COLOR_MAPPING.get(base_key, "black")
+    # Für den linken Griff (G2L) leicht ins Spektrum verschieben
+    if hold == "G2L":
+        return adjust_color(base_color, shift=0.15)
+    return base_color
+
 NCOL = 5
 DEFAULT_FIGSIZE = (6.3, 8)
 COLOR_MAPPING = {
@@ -69,7 +83,6 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
         curret_forcen = next((f for f in COLOR_MAPPING if f in col), None)
         ax_top.plot(time, hold_data[col], label=clean_label(col), color=COLOR_MAPPING.get(curret_forcen))
     ax_top.set_title(f"Kräfte – {grip_label}")
-    set_dynamic_ylabel(ax_top, normalizebyweight=normalizebyweight)
     if normal_cols:
         data_subset = hold_data[normal_cols].dropna()
         ax_top.set_ylim(compute_ylimits(data_subset, margin=margin, fallback=(-100, 1000)))
@@ -170,7 +183,6 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         time_left = plot_dict["G2L"]["data"]["Time [s]"]
         plot_normal_forces(ax_left, plot_dict["G2L"]["data"], forces_g2, color_mapping)
         ax_left.set_title("GL")
-        set_dynamic_ylabel(ax_left, normalizebyweight=normalizebyweight)
         ax_left.set_ylim([y_min_global, y_max_global])
         # Falls Mz ebenfalls aktiv ist, erstelle eine Sekundäxe und plotte Mz
         mz_cols = [col for col in plot_dict["G2L"]["data"].columns if "Mz" in col]
@@ -198,7 +210,6 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
             plot_normal_forces(ax_right, plot_dict["G1R"]["data"], forces_g1, color_mapping)
             ax_right.set_title("GR")
             ax_right.set_xlabel("Time [s]")
-            set_dynamic_ylabel(ax_right, normalizebyweight=normalizebyweight)
             ax_right.set_ylim([y_min_global, y_max_global])
             # Falls Mz aktiv ist, plotte zusätzlich Mz auf einer Sekundärachse
             mz_cols = [col for col in plot_dict["G1R"]["data"].columns if "Mz" in col]
@@ -264,14 +275,9 @@ def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, s
         for current_hold in holdNameList:
             legend_suffix = {"G1R": "_R", "G2L": "_L"}.get(current_hold, "unknown")
             curr_alpha = {"G1R": 1, "G2L": 0.5}.get(current_hold, 0.8)
-            if current_force == "Fy":
-                curr_color = "#1f77b4" if current_hold == "G1R" else "#17becf"
-            elif current_force == "Fz":
-                curr_color = "#ff7f0e" if current_hold == "G1R" else "#F79F0B"
-            else:
-                base_force = next((f for f in COLOR_MAPPING if f in current_force), None)
-                base_color = COLOR_MAPPING.get(base_force, "black")
-                curr_color = adjust_color(base_color, shift=0.15) if current_hold == "G2L" else base_color
+
+            # Farbe aus zentraler Helferfunktion
+            curr_color = get_color_for(current_force, current_hold)
 
             matching_cols = [col for col in file_dict[current_hold]["data"].columns if current_force in col]
             if not matching_cols:
@@ -298,13 +304,11 @@ def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, s
     # Top plot axis
     ax_top.set_title(f"Vergleich: {filename}")
     ax_top.set_xlabel("Time [s]")
-    set_dynamic_ylabel(ax_top, normalizebyweight=normalizebyweight)
     ax_top.set_ylim([y_min_global, y_max_global])
     ax_top.legend(ncol=NCOL)
 
     # Bottom plot Axis
     ax_bottom.set_xlabel("Time [s]")
-    set_dynamic_ylabel(ax_bottom, normalizebyweight=normalizebyweight)
     ax_bottom.legend(ncol=NCOL)
     ax_bottom.set_ylim([y_min_global, y_max_global])
     
