@@ -90,7 +90,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
     ax_bottom.legend(loc="upper right", ncol=NCOL)
     
     # Setze den eindeutigen Titel und speichere optional
-    apply_default_plot_style(fig)
+    apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
     if save_plot:
         save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
 
@@ -217,7 +217,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         axes[1].set_xlim([time_min - 0.01 * time_range, time_max + 0.05 * time_range])
     
     plt.tight_layout()
-    apply_default_plot_style(fig)
+    apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
     if save_plot:
         save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
     # plt.show()
@@ -308,7 +308,7 @@ def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, s
     ax_bottom.legend(ncol=NCOL)
     ax_bottom.set_ylim([y_min_global, y_max_global])
     
-    apply_default_plot_style(fig=fig)
+    apply_default_plot_style(fig=fig, normalizebyweight=normalizebyweight)
     if save_plot:
         plt.savefig(f"{save_folder}/{filename}.png")
     plt.show()

@@ -27,42 +27,46 @@ def compute_ylimits(data_subset, margin=1.2, fallback=(-100, 800)):
     return (y_min * margin if y_min < 0 else y_min / margin,
             y_max * margin if y_max > 0 else y_max / margin)
 
-def apply_default_plot_style(fig):
+def apply_default_plot_style(fig, normalizebyweight=False):
     """
     Wendet Standardwerte für Schriftgröße, Schriftart und andere Stiloptionen auf die gesamte Figure an.
+    Entfernt doppelte Schleifen und hält y-Label-Logik zentral.
     """
     for ax in fig.get_axes():
+        # Grundstil
         ax.tick_params(labelsize=10)
         ax.title.set_fontsize(12)
         ax.xaxis.label.set_fontsize(11)
         ax.yaxis.label.set_fontsize(11)
-        set_dynamic_ylabel(ax)
         for label in ax.get_xticklabels() + ax.get_yticklabels():
             label.set_fontname("Arial")
             label.set_fontsize(10)
 
-    
-    for ax in fig.get_axes():
+        # Dynamisches y-Label
+        set_dynamic_ylabel(ax, normalizebyweight=normalizebyweight)
+
+        # Legendenstil
         legend = ax.get_legend()
         if legend:
             legend.prop.set_size(3)
             legend._ncol = 5
             legend.set_frame_on(True)
 
-        # Dynamischer y-Label und Achsenbereich für FgR
+        # FgR-Spezialfall: Limits oder Sekundärachse
         labels = [line.get_label() for line in ax.get_lines()]
         if labels and all("FgR" in label for label in labels):
-            ax.set_ylabel("F [%]")
             ax.set_ylim([-5, 90])
         elif any("FgR" in label for label in labels) and not all("FgR" in label for label in labels):
-            # Sekundärachse für FgR erzeugen
             sec_ax = ax.twinx()
             for line in ax.get_lines():
                 if "FgR" in line.get_label():
-                    # Zeichne FgR-Linien auf sec_ax erneut
-                    sec_ax.plot(line.get_xdata(), line.get_ydata(), label=line.get_label(), color=line.get_color(), linestyle=line.get_linestyle())
-                    line.set_visible(False)  # Original-Linie ausblenden
-            sec_ax.set_ylabel("F [%]")
+                    sec_ax.plot(line.get_xdata(), line.get_ydata(),
+                                label=line.get_label(),
+                                color=line.get_color(),
+                                linestyle=line.get_linestyle())
+                    line.set_visible(False)
+            # Dynamisches y-Label für Sekundärachse
+            set_dynamic_ylabel(sec_ax, normalizebyweight=normalizebyweight)
             sec_ax.set_ylim([-5, 90])
             combine_legends(ax, sec_ax, loc="upper left", ncol=5)
 

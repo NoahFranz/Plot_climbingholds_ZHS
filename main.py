@@ -17,6 +17,7 @@ def main():
     print("forces_to_plot:", forces_to_plot, "holds to plot", holds_to_plot)
     if filter_settings["normalize_by_weight"] == True:
         print("Forces Normalized by weight")
+        optional_suffix = "_NBW"
     
  
     folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests"
