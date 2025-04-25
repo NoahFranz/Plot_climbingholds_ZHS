@@ -4,6 +4,11 @@ import math
 from plotUITLS import*
 from matplotlib.colors import to_rgb
 
+PLOT_CONFIG = {
+    "default_figsize": (6.3, 8),
+    "legend_ncol": 5
+}
+
 def adjust_color(color, shift=0.2):
     r, g, b = to_rgb(color)
     r = max(0, min(1, r - shift))
@@ -24,8 +29,17 @@ def get_color_for(force, hold):
         return adjust_color(base_color, shift=0.15)
     return base_color
 
-NCOL = 5
-DEFAULT_FIGSIZE = (6.3, 8)
+def _plot_force_lines(ax, df, forces, color_map, alpha=1.0, suffix=""):
+    """
+    Plottet alle Spalten aus df, deren Name einen Eintrag in forces enthält.
+    """
+    time = df["Time [s]"]
+    for force in forces:
+        cols = [col for col in df.columns if force in col]
+        for col in cols:
+            ax.plot(time, df[col], label=clean_label(force) + suffix,
+                    color=color_map.get(force, "black"), alpha=alpha)
+
 COLOR_MAPPING = {
     "Fy": "blue",
     "Fx": "green",
@@ -76,7 +90,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
 
     # Erstelle eine Figure mit 2 Zeilen und 1 Spalte; 
     # die Breite ist fix (6.3 Zoll, passend für LaTeX) und Höhe auf 8 Zoll gewählt.
-    fig, (ax_top, ax_bottom) = plt.subplots(2, 1, figsize=DEFAULT_FIGSIZE, sharex=True)
+    fig, (ax_top, ax_bottom) = plt.subplots(2, 1, figsize=PLOT_CONFIG["default_figsize"], sharex=True)
     
     # --- Oberer Subplot: Normalkräfte ---
     for col in normal_cols:
@@ -87,7 +101,7 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
         data_subset = hold_data[normal_cols].dropna()
         ax_top.set_ylim(compute_ylimits(data_subset, margin=margin, fallback=(-100, 1000)))
     # Füge eine Legende hinzu (innerhalb des Plots)
-    ax_top.legend(loc="upper right", ncol=NCOL)
+    ax_top.legend(loc="upper right", ncol=PLOT_CONFIG["legend_ncol"])
     
     # --- Unterer Subplot: Moment ---
     for col in moment_cols:
@@ -100,10 +114,10 @@ def plot_single_hold_splitview(hold_data, forces, filename="", grip_label="", sa
         y_min, y_max = compute_ylimits(data_subset, margin=margin, fallback=(-10, 10))
         # Wenn beide Werte innerhalb ±7 liegen, setze feste Grenzen
         ax_bottom.set_ylim([y_min, y_max])
-    ax_bottom.legend(loc="upper right", ncol=NCOL)
+    ax_bottom.legend(loc="upper right", ncol=PLOT_CONFIG["legend_ncol"])
     
     # Setze den eindeutigen Titel und speichere optional
-    apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
+    apply_default_plot_style(fig, normalizebyweight=normalizebyweight, figsize=PLOT_CONFIG["default_figsize"])
     if save_plot:
         save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
 
@@ -176,7 +190,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         plot_mz_on_secondary_axis(ax_left, time_left, plot_dict["G2L"]["data"], mz_cols)
         ax_left.set_ylabel("Mz [Nm]")
         # Hole und setze die Legende
-        combine_legends(ax_left, None, loc="upper left", ncol=NCOL)
+        combine_legends(ax_left, None, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
     else:
         # Plotte die normalen Kräfte (außer Mz) auf dem oberen Plot
         ax_left = axes[0]
@@ -191,7 +205,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
             sec_ax_left = ax_left.twinx()
             plot_mz_on_secondary_axis(sec_ax_left, time_left, plot_dict["G2L"]["data"], mz_cols)
         # Kombiniere Legenden von primärer und sekundärer Achse
-        combine_legends(ax_left, sec_ax_left, loc="upper left", ncol=NCOL)
+        combine_legends(ax_left, sec_ax_left, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
     
     # ----- Rechter Griff (G1R) -----
     if has_g1:
@@ -202,7 +216,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
             time_right = plot_dict["G1R"]["data"]["Time [s]"]
             plot_mz_on_secondary_axis(ax_right, time_right, plot_dict["G1R"]["data"], mz_cols)
             ax_right.set_ylabel("Mz [Nm]")
-            combine_legends(ax_right, None, loc="upper left", ncol=NCOL)
+            combine_legends(ax_right, None, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
         else:
             # Plotte normale Kräfte (außer Mz) für den rechten Griff
             ax_right = axes[1]
@@ -217,7 +231,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
             if mz_cols and "Mz" in forces_g1:
                 sec_ax_right = ax_right.twinx()
                 plot_mz_on_secondary_axis(sec_ax_right, time_right, plot_dict["G1R"]["data"], mz_cols)
-            combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=NCOL)
+            combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
     
     # Dynamische Berechnung der Zeitachsen-Grenzen mit 10% Puffer
     time_min = min(time_left.min(), time_right.min()) if has_g1 else time_left.min()
@@ -228,7 +242,7 @@ def plot_data_per_hold(plot_dict, forces_g1, forces_g2, filename, save_plot=Fals
         axes[1].set_xlim([time_min - 0.01 * time_range, time_max + 0.05 * time_range])
     
     plt.tight_layout()
-    apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
+    apply_default_plot_style(fig, normalizebyweight=normalizebyweight, figsize=PLOT_CONFIG["default_figsize"])
     if save_plot:
         save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
     # plt.show()
@@ -268,51 +282,37 @@ def plot_selected_forces_comparison(file_dict, forces_g1, forces_g2, filename, s
         if f not in allForcesList:
             allForcesList.append(f)
 
-    fig, (ax_top, ax_bottom) = plt.subplots(2, 1, figsize=(6.3, 8))
-    axFlag = 0
+    fig, axes = plt.subplots(2, 1, figsize=PLOT_CONFIG["default_figsize"])
+    axes_list = list(axes)
     print("allForcesList in plot_Selected_force:", allForcesList)
-    for current_force in allForcesList:
-        for current_hold in holdNameList:
-            legend_suffix = {"G1R": "_R", "G2L": "_L"}.get(current_hold, "unknown")
-            curr_alpha = {"G1R": 1, "G2L": 0.5}.get(current_hold, 0.8)
-
-            # Farbe aus zentraler Helferfunktion
+    for idx, current_force in enumerate(allForcesList[:2]):
+        ax = axes_list[idx]
+        for current_hold in ["G1R", "G2L"]:
+            suffix = {"G1R": "_R", "G2L": "_L"}[current_hold]
+            alpha = 1 if current_hold == "G1R" else 0.5
             curr_color = get_color_for(current_force, current_hold)
-
-            matching_cols = [col for col in file_dict[current_hold]["data"].columns if current_force in col]
-            if not matching_cols:
+            cols = [c for c in file_dict[current_hold]["data"].columns if current_force in c]
+            if not cols:
                 continue
-            time = file_dict[current_hold]["data"]["Time [s]"]
-            plot_force = file_dict[current_hold]["data"][matching_cols[0]]
+            df = file_dict[current_hold]["data"]
+            _plot_force_lines(ax, df, [current_force], COLOR_MAPPING, alpha=alpha, suffix=suffix)
 
-            if axFlag == 0:
-                ax_top.plot(time, plot_force,
-                            label=clean_label(current_force)+legend_suffix,
-                            color=curr_color, alpha=curr_alpha)
-            elif axFlag == 1:
-                ax_bottom.plot(time, plot_force,
-                               label=clean_label(current_force)+legend_suffix,
-                               color=curr_color, alpha=curr_alpha)
-            else:
-                print("all plots populated already, only 2 Forces are possible per plot")
-        axFlag = 1
-    
     # equal limits for both forces
     y_min_global = file_dict["G1R"]["global_limits"]["global_y_min"]*margin
     y_max_global = file_dict["G1R"]["global_limits"]["global_y_max"]*margin
 
     # Top plot axis
-    ax_top.set_title(f"Vergleich: {filename}")
-    ax_top.set_xlabel("Time [s]")
-    ax_top.set_ylim([y_min_global, y_max_global])
-    ax_top.legend(ncol=NCOL)
+    axes[0].set_title(f"Vergleich: {filename}")
+    axes[0].set_xlabel("Time [s]")
+    axes[0].set_ylim([y_min_global, y_max_global])
+    axes[0].legend(ncol=PLOT_CONFIG["legend_ncol"])
 
     # Bottom plot Axis
-    ax_bottom.set_xlabel("Time [s]")
-    ax_bottom.legend(ncol=NCOL)
-    ax_bottom.set_ylim([y_min_global, y_max_global])
+    axes[1].set_xlabel("Time [s]")
+    axes[1].legend(ncol=PLOT_CONFIG["legend_ncol"])
+    axes[1].set_ylim([y_min_global, y_max_global])
     
-    apply_default_plot_style(fig=fig, normalizebyweight=normalizebyweight)
+    apply_default_plot_style(fig=fig, normalizebyweight=normalizebyweight, figsize=PLOT_CONFIG["default_figsize"])
     if save_plot:
         plt.savefig(f"{save_folder}/{filename}.png")
     plt.show()
