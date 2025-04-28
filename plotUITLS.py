@@ -216,3 +216,9 @@ def export_figure_data_as_mat(fig, filename="figure_export.mat"):
 
     savemat(filename, export_data)
     print(f"Figure-Daten als .mat-Datei gespeichert: {filename}")
+
+    def get_first_value(lst):
+        if isinstance(lst, list) and len(lst) > 0:
+            return lst[0]
+        return 0
+
