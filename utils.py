@@ -10,6 +10,7 @@ def clean_data(df):
     df_clean = df.drop(columns=columns_to_drop)
     return df_clean
 
+
 def get_min_max_values(df):
     """
     Bestimmt den  minimalen und maximalen Wert eines datasets (außer 'Time [s]') aus dem DataFrame.
@@ -203,22 +204,27 @@ def get_force_intervals(
     start_frac: float = 0.05,
     start_dur: float = 0.1,
     end_frac: float = 0.05,
-    end_dur: float = 0.1,
+    end_dur: float = 0.01,
     time_col: str = "Time [s]",
     start_threshold: Optional[float] = None,
     end_threshold: Optional[float] = None
 ) -> Dict[str, Tuple[float, float]]:
     """
-    Bestimmt für jede Kraft in `forces` das Aktivitätsintervall:
-      - Start: erstes Segment ≥ (threshold oder start_frac*max) für mind. start_dur s.
-      - Ende: erstes Segment < (threshold oder end_frac*max) für mind. end_dur s.
+    Bestimmt Aktivitätsintervalle anhand von 'Fz' im DataFrame.
+    Nur die Kraft 'Fz' wird zur Detektion der Intervalle verwendet.
+    Für alle anderen Kräfte werden exakt dieselben Zeitabschnitte (Intervalle) verwendet wie für 'Fz'.
+    
+    Für jedes Intervall gilt zusätzlich:
+      - Das Intervall beginnt, wenn 'Fz' für mindestens start_dur Sekunden oberhalb des Startschwellwertes liegt.
+      - Das Intervall endet, wenn 'Fz' für mindestens end_dur Sekunden unterhalb des Endschwellwertes bleibt.
+      - Innerhalb des Intervalls muss 'Fz' mindestens einmal ≥ 5 betragen.
 
     Rückgabe:
-      { 'Fy': (t0, t1), 'Fx': (t0, t1), ... }
+      { 'Fz': [(t0, t1), ...], 'Fx': [(t0, t1), ...], ... }
     """
     # Default hardcoded thresholds & force set (for quick tests)
     start_threshold = 1.3
-    end_threshold = 1
+    end_threshold = 1.1
     forces = {"Fz"}
     intervals = {}
     time = df[time_col]
@@ -262,7 +268,15 @@ def get_force_intervals(
                 t1 = time.iloc[-1]
             # Accept only intervals where duration ≥ end_dur
             if (t1 - t0) >= end_dur:
-                force_intervals.append((t0, t1))
+                # --- Zusatzbedingung: min. einmal Fz >= 5 innerhalb des Intervalls ---
+ 
+                # Suche die richtige Fz-Spalte im DataFrame - pro Griff-Dict gibt es nur eine
+                Fz_cols = [col for col in df.columns if "Fz" in col]
+                mask_interval = (df[time_col] >= t0) & (df[time_col] <= t1)
+                # Prüfe, ob irgendein Wert >= 5 ist
+                if Fz_cols and (df.loc[mask_interval, Fz_cols] >= 5).any().any():
+                    force_intervals.append((t0, t1))
+
         intervals[force] = force_intervals
 
     return intervals
