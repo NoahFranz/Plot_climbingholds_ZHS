@@ -5,6 +5,7 @@ from plotdata import *
 import os
 
 
+
 def main():
     result = run_gui()
     if result is None:
@@ -15,9 +16,12 @@ def main():
     normalizebyweight = filter_settings["normalize_by_weight"]
     
     print("forces_to_plot:", forces_to_plot, "holds to plot", holds_to_plot)
+
     if filter_settings["normalize_by_weight"] == True:
         print("Forces Normalized by weight")
         optional_suffix = "_NBW"
+    if plot_settings["show_impulses"]:
+        optional_suffix += "_IMP"
     
  
     folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Tests"
@@ -39,6 +43,7 @@ def main():
     if all_lvm_data_dict is None:
         return
 
+    onlyimpulses = True
   #  print("\nall_lvm_data_dict keys:", list(all_lvm_data_dict.keys()))
 
     
@@ -51,69 +56,80 @@ def main():
     # Wenn "Plots erstellen" aktiviert ist:
     if plot_settings["create"]:
         print("\n --- Plotting ------")    
-        # Fall 1: Normale kombinierte Darstellung von G1R und G2L (kein Split, kein Vergleich)
-        if not plot_settings["split_fmz"] and not plot_settings["compare_forces"]:
-            for curr_filename, data_per_file in all_lvm_data_dict.items():
-                print(f"Plotting GL+GR: {curr_filename}")
-                plot_data_per_hold(
-                    data_per_file,
-                    forces_g1,
-                    forces_g2,
-                    curr_filename + optional_suffix,
-                    save_plot=plot_settings["save"],
-                    save_folder=save_folder,
-                    cutoff=cutoff,
-                    normalizebyweight=normalizebyweight,
-                    show_intervals=plot_settings["show_impulses"]
-                )
-        
-        # Fall 2: Vergleich der Kräfte pro Griff (kein Split, aber Vergleich aktiviert)
-        elif not plot_settings["split_fmz"] and plot_settings["compare_forces"]:
-            for filename, file_data in all_lvm_data_dict.items():
-                plot_selected_forces_comparison(
-                    file_data,
-                    forces_g1,
-                    forces_g2,
-                    filename=filename + optional_suffix,
-                    save_folder=save_folder,
-                    save_plot=plot_settings["save"],
-                    cutoff=cutoff,
-                    normalizebyweight=normalizebyweight,
-                    show_intervals=["show_impulses"]
-                )
-        
-        # Fall 3: Split-Modus aktiviert – Darstellung für G1 und G2 getrennt
-        else:
-            for curr_filename, data_per_file in all_lvm_data_dict.items():
-                if holds_to_plot["G2"]:
-                    print(f"Plotting G2L splitview: {curr_filename}")
-                    plot_single_hold_splitview(
-                        data_per_file["G2L"]["data"],
+
+        if onlyimpulses == True:
+            plot_impulses_bar(
+            all_lvm_data_dict,
+            force="Fz",           # ODER "Fy" usw.
+            split_grips=False,    # Nur ein Plot, beide Griffe nebeneinander
+            show_values=True,     # Werte über Balken anzeigen
+            figsize=(10, 6),      # Plotgröße
+            title="Impulsvergleich aller Athleten"
+        )
+        else:    
+            # Fall 1: Normale kombinierte Darstellung von G1R und G2L (kein Split, kein Vergleich)
+            if not plot_settings["split_fmz"] and not plot_settings["compare_forces"]:
+                for curr_filename, data_per_file in all_lvm_data_dict.items():
+                    print(f"Plotting GL+GR: {curr_filename}")
+                    plot_data_per_hold(
+                        data_per_file,
+                        forces_g1,
                         forces_g2,
                         curr_filename + optional_suffix,
-                        grip_label="links",
                         save_plot=plot_settings["save"],
                         save_folder=save_folder,
                         cutoff=cutoff,
                         normalizebyweight=normalizebyweight,
-                        show_intervals=["show_impulses"]
+                        show_intervals=plot_settings["show_impulses"]
                     )
-                if holds_to_plot["G1"]:
-                    print(f"Plotting G1R splitview: {curr_filename}")
-                    plot_single_hold_splitview(
-                        data_per_file["G1R"]["data"],
+            
+            # Fall 2: Vergleich der Kräfte pro Griff (kein Split, aber Vergleich aktiviert)
+            elif not plot_settings["split_fmz"] and plot_settings["compare_forces"]:
+                for filename, file_data in all_lvm_data_dict.items():
+                    plot_selected_forces_comparison(
+                        file_data,
                         forces_g1,
-                        curr_filename + optional_suffix,
-                        grip_label="rechts",
-                        save_plot=plot_settings["save"],
+                        forces_g2,
+                        filename=filename + optional_suffix,
                         save_folder=save_folder,
+                        save_plot=plot_settings["save"],
                         cutoff=cutoff,
                         normalizebyweight=normalizebyweight,
                         show_intervals=["show_impulses"]
                     )
+            
+            # Fall 3: Split-Modus aktiviert – Darstellung für G1 und G2 getrennt
+            else:
+                for curr_filename, data_per_file in all_lvm_data_dict.items():
+                    if holds_to_plot["G2"]:
+                        print(f"Plotting G2L splitview: {curr_filename}")
+                        plot_single_hold_splitview(
+                            data_per_file["G2L"]["data"],
+                            forces_g2,
+                            curr_filename + optional_suffix,
+                            grip_label="links",
+                            save_plot=plot_settings["save"],
+                            save_folder=save_folder,
+                            cutoff=cutoff,
+                            normalizebyweight=normalizebyweight,
+                            show_intervals=["show_impulses"]
+                        )
+                    if holds_to_plot["G1"]:
+                        print(f"Plotting G1R splitview: {curr_filename}")
+                        plot_single_hold_splitview(
+                            data_per_file["G1R"]["data"],
+                            forces_g1,
+                            curr_filename + optional_suffix,
+                            grip_label="rechts",
+                            save_plot=plot_settings["save"],
+                            save_folder=save_folder,
+                            cutoff=cutoff,
+                            normalizebyweight=normalizebyweight,
+                            show_intervals=["show_impulses"]
+                        )
 
-        # Zeige alle erzeugten Plots
-        plt.show()
+            # Zeige alle erzeugten Plots
+            plt.show()
 
 
 
