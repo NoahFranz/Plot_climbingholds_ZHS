@@ -343,3 +343,25 @@ def compute_impulses_per_contact(
         imp = round(imp, 1)
         impulses.append(imp)
     return impulses
+
+
+# -------------------------------------------------------------
+# Hilfsfunktion: Eindeutige, ausgewählte Kräfte extrahieren
+def get_unique_selected_forces(forces_to_plot: Dict[str, Dict[str, bool]]) -> List[str]:
+    """
+    Gibt eine Liste eindeutiger Kraftnamen zurück, die in forces_to_plot
+    auf True gesetzt sind. Ignoriert den Schlüssel 'all'.
+
+    Args:
+        forces_to_plot (Dict[str, Dict[str, bool]]): Dictionary mit Griffen 'G1' und 'G2',
+            die jeweils eine Dict von Kraftnamen zu bools enthalten.
+
+    Returns:
+        List[str]: Eine Liste eindeutiger Kraftnamen, für die der Wert True ist.
+    """
+    unique_forces: List[str] = []
+    for grip_dict in forces_to_plot.values():
+        for force, selected in grip_dict.items():
+            if force != "all" and selected and force not in unique_forces:
+                unique_forces.append(force)
+    return unique_forces

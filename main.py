@@ -30,6 +30,9 @@ def main():
     optional_suffix = "_" + optional_suffix if optional_suffix else ""
     optional_suffix += get_force_suffix(forces_to_plot)
 
+    unique_force_list = get_unique_selected_forces(forces_to_plot=forces_to_plot)
+
+
     all_lvm_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"], usefilter = filter_settings["use_filter"], normalizeByweight = filter_settings["normalize_by_weight"], save_plot=plot_settings["save"])
 
     if filter_settings["use_filter"]:
@@ -58,19 +61,20 @@ def main():
         print("\n --- Plotting ------")    
 
         if onlyimpulses == True:
-            plot_impulses_bar(
-            all_lvm_data_dict,
-            force="Fz",           # ODER "Fy" usw.
-            split_grips=True,    # Nur ein Plot, beide Griffe nebeneinander
-            show_values=True,     # Werte über Balken anzeigen
-            figsize=(10, 6),      # Plotgröße
-            title="Impulsvergleich aller Athleten",
-            normalizebyweight=normalizebyweight,
-            save_folder=save_folder,
-            save_plot=plot_settings["save"],
-            optional_suffix=optional_suffix
-            
-        )
+            for curr_force in unique_force_list:
+                plot_impulses_bar(
+                all_lvm_data_dict,
+                force="F",           # ODER "Fy" usw.
+                split_grips=plot_settings["bar_split"],    # Nur ein Plot, beide Griffe nebeneinander
+                show_values=plot_settings["show_values"],     # Werte über Balken anzeigen
+                figsize=(6.3, 8),      # Plotgröße
+                title="Impulsvergleich aller Athleten",
+                normalizebyweight=normalizebyweight,
+                save_folder=save_folder,
+                save_plot=plot_settings["save"],
+                optional_suffix=optional_suffix
+                
+            )
         else:    
             # Fall 1: Normale kombinierte Darstellung von G1R und G2L (kein Split, kein Vergleich)
             if not plot_settings["split_fmz"] and not plot_settings["compare_forces"]:

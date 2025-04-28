@@ -15,7 +15,7 @@ def run_gui():
     """
     root = tk.Tk()
     root.title("Optionen wählen")
-    root.geometry("700x1300")
+    root.geometry("700x400")
 
     # Scrollbares Fenster mit Canvas
     main_canvas = tk.Canvas(root, borderwidth=0, highlightthickness=0)
@@ -36,7 +36,7 @@ def run_gui():
     scrollbar.pack(side="right", fill="y")
 
     # Fenster zentrieren
-    window_width = 700
+    window_width = 350
     window_height = 1300
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
@@ -47,6 +47,18 @@ def run_gui():
     # Frame für Plot-Optionen
     plot_options_frame = tk.Frame(scrollable_frame)
     plot_options_frame.pack(side="top", fill="x")
+
+    # BAR-Optionen
+    bar_frame = tk.LabelFrame(scrollable_frame, text="Bar-Optionen")
+    bar_frame.pack(pady=5, padx=10, fill="x", anchor="center")
+
+    # Signal-/Daten-Optionen
+    signal_frame = tk.LabelFrame(scrollable_frame, text="Signal-Optionen")
+    signal_frame.pack(pady=5, padx=10, fill="x", anchor="center")
+
+    # Zeit-Graphen-Optionen
+    time_frame = tk.LabelFrame(scrollable_frame, text="Zeit-Graphen")
+    time_frame.pack(pady=5, padx=10, fill="x", anchor="center")
 
     submit_frame = tk.Frame(scrollable_frame)
 
@@ -62,21 +74,28 @@ def run_gui():
 
     # Option für Impuls-Berechnung anzeigen
     show_impulses_var = tk.BooleanVar(value=False)
-    show_impulses_checkbox = tk.Checkbutton(scrollable_frame, text="Impuls anzeigen", variable=show_impulses_var)
-    show_impulses_checkbox.pack(pady=5)
+    show_impulses_checkbox = tk.Checkbutton(time_frame, text="Impuls anzeigen", variable=show_impulses_var)
+    show_impulses_checkbox.pack(anchor="center", pady=2, padx=5)
+
+    # Option für Bar-Splitview
+    bar_split_var = tk.BooleanVar(value=False)
+    bar_split_checkbox = tk.Checkbutton(bar_frame, text="BAR Splitview", variable=bar_split_var)
+    bar_split_checkbox.pack(anchor="center", padx=5)
+
+    # Option zum Anzeigen der Werte über den Balken
+    show_values_var = tk.BooleanVar(value=True)
+    show_values_checkbox = tk.Checkbutton(bar_frame, text="Werte anzeigen", variable=show_values_var)
+    show_values_checkbox.pack(anchor="center", padx=5)
    
     # Option zur Trennung von Normalkräften und Moment in getrennten Plots
-    trim_split_frame = tk.Frame(scrollable_frame)
-    trim_split_frame.pack(pady=10)
-
     split_fmz_var = tk.BooleanVar(value=False)
-    split_fmz_checkbox = tk.Checkbutton(trim_split_frame, text="F und Mz trennen?", variable=split_fmz_var)
-    split_fmz_checkbox.pack(in_=trim_split_frame)
+    split_fmz_checkbox = tk.Checkbutton(time_frame, text="F & Mz trennen", variable=split_fmz_var)
+    split_fmz_checkbox.pack(anchor="center", pady=2, padx=5)
 
     # Option zum Vergleichen von Kräften pro Griff
     compare_forces_var = tk.BooleanVar(value=False)
-    compare_forces_checkbox = tk.Checkbutton(scrollable_frame, text="Kräfte pro Griff vergleichen?", variable=compare_forces_var)
-    compare_forces_checkbox.pack(pady=10)
+    compare_forces_checkbox = tk.Checkbutton(time_frame, text="Kräfte vergleichen", variable=compare_forces_var)
+    compare_forces_checkbox.pack(anchor="center", pady=2, padx=5)
 
     # Option zum Trimmen der Plots
     trim_plot_var = tk.BooleanVar(value=False)
@@ -87,11 +106,11 @@ def run_gui():
         else:
             trim_frame.pack_forget()
 
-    trim_plot_checkbox = tk.Checkbutton(trim_split_frame, text="Plot trimmen?", variable=trim_plot_var, command=toggle_trim_options)
-    trim_plot_checkbox.pack(in_=trim_split_frame)
+    trim_plot_checkbox = tk.Checkbutton(signal_frame, text="Plot trimmen?", variable=trim_plot_var, command=toggle_trim_options)
+    trim_plot_checkbox.pack(anchor="center", pady=2, padx=5)
 
     # Collapsible Frame für Trim-Optionen
-    trim_frame = tk.LabelFrame(scrollable_frame, text="Trim-Optionen")
+    trim_frame = tk.LabelFrame(signal_frame, text="Trim-Optionen")
     
     cutoff_start_var = tk.IntVar(value=0)
     cutoff_end_var = tk.IntVar(value=0)
@@ -104,15 +123,13 @@ def run_gui():
     cutoff_end_entry = tk.Entry(trim_frame, textvariable=cutoff_end_var)
     cutoff_end_entry.pack(fill="x", padx=5)
 
-
-
-    # Option zur verwendung des Savatzgi-Goolay filters
+    # Option zur Verwendung des Savitzky-Golay Filters
     use_SVG_filter_var = tk.BooleanVar(value=True)
-    use_SVG_filter_checkbox = tk.Checkbutton(scrollable_frame, text="Savatzgi-golay filter verwenden?", variable=use_SVG_filter_var)
-    use_SVG_filter_checkbox.pack(pady=10)
+    use_SVG_filter_checkbox = tk.Checkbutton(signal_frame, text="Savitzky-Golay Filter", variable=use_SVG_filter_var)
+    use_SVG_filter_checkbox.pack(anchor="center", pady=2, padx=5)
 
     # Collapsible Frame für Savitzky-Golay Optionen
-    svg_options_frame = tk.LabelFrame(scrollable_frame, text="Savitzky-Golay Optionen")
+    svg_options_frame = tk.LabelFrame(signal_frame, text="Savitzky-Golay Optionen")
     svg_options_frame.pack(pady=5, padx=10, fill="x")
 
     window_length_var = tk.IntVar(value=11)
@@ -121,9 +138,9 @@ def run_gui():
     # Checkbox: Kräfte/Momente durch Körpergewicht normieren
     normalize_by_weight_var = tk.BooleanVar(value=True)
     normalize_by_weight_checkbox = tk.Checkbutton(
-        scrollable_frame, text="Kräfte/Momente durch Körpergewicht normieren", variable=normalize_by_weight_var
+        signal_frame, text="Normierung nach Körpergewicht", variable=normalize_by_weight_var
     )
-    normalize_by_weight_checkbox.pack(pady=10)
+    normalize_by_weight_checkbox.pack(anchor="center", pady=2, padx=5)
 
     tk.Label(svg_options_frame, text="Fensterlänge:").pack(anchor="w", padx=5)
     window_length_entry = tk.Entry(svg_options_frame, textvariable=window_length_var)
@@ -140,8 +157,8 @@ def run_gui():
         svg_options_visible = not svg_options_visible
         svg_options_frame.pack_forget() if not svg_options_visible else svg_options_frame.pack(pady=5, padx=10, fill="x")
 
-    svg_toggle_button = tk.Button(scrollable_frame, text="Savitzky-Golay Optionen anzeigen/ausblenden", command=toggle_svg_options)
-    svg_toggle_button.pack(pady=10)
+    svg_toggle_button = tk.Button(signal_frame, text="Optionen ein/ausblenden", command=toggle_svg_options)
+    svg_toggle_button.pack(anchor="w", pady=2, padx=5)
     toggle_svg_options()
     
     # Eingabe für Datenordner (für LVM-Dateien)
@@ -363,7 +380,9 @@ def run_gui():
         "save": save_plots_var.get(),
         "split_fmz": split_fmz_var.get(),
         "compare_forces": compare_forces_var.get(),
-        "show_impulses": show_impulses_var.get()
+        "show_impulses": show_impulses_var.get(),
+        "bar_split": bar_split_var.get(),
+        "show_values": show_values_var.get()
     }
 
     filter_settings = {

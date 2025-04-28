@@ -1,6 +1,6 @@
+
 import matplotlib.pyplot as plt
 import pandas as pd
-import math
 from plotUITLS import*
 from matplotlib.colors import to_rgb
 from typing import List, Dict, Any, Optional, Tuple, Union
@@ -396,6 +396,19 @@ def plot_selected_forces_comparison(
         # Ausnahmebehandlung: Bei Fehlern in der Plot-Erstellung ausgeben, aber Programm nicht abbrechen
         logger.exception(f"plot_selected_forces_comparison failed for {filename}: {e}")
 
+
+
+
+
+
+
+
+
+
+
+
+
+
 # ======================================================
 # Funktion: plot_impulses_bar
 # Erstellt Balkendiagramm für Impulse verschiedener Dateien (Athleten) und Griffe
@@ -403,7 +416,7 @@ def plot_selected_forces_comparison(
 # ======================================================
 def plot_impulses_bar(
     all_lvm_data_dict,
-    force: str = "Fz",  # Oder "Fy" etc.
+    force: str = "",  # Oder "Fy" etc.
     split_grips: bool = False,  # True: oben/unten, False: gruppiert nebeneinander
     show_values: bool = True,
     figsize: Tuple[int, int] = (8, 5),
@@ -418,7 +431,7 @@ def plot_impulses_bar(
     """
     # Initialisiere Listen für Athletennamen, Impulswerte und Kontaktzeiten
     print("\n +++++++++ in plot_impulse_bar ++++++++++")
-    print("     saving: ", save_plot)
+    print("     force: ", force)
 
     # variable init
     optional_suffix += "_BAR"
@@ -456,10 +469,6 @@ def plot_impulses_bar(
         g1_ct = find_max_impulse_interval_length(g1_imp_list, g1_intervals)
         g2_ct = find_max_impulse_interval_length(g2_imp_list, g2_intervals)
 
-        #Debug
-      #  print(f"[DEBUG] Datei: {fname}")
-      #  print(f"        | G1R g1_imp: {g1_imp} | G2L g2_imp: {g2_imp}")
-
         # Name und relevant impulses for plotting
         athlete_names.append(curr_ath_name)
 
@@ -471,11 +480,6 @@ def plot_impulses_bar(
             g2l_impulses.append(g2_imp)
             contact_times_g2.append(g2_ct)
 
-        #Debug
-#   print("\n IMPULS die geplottert werden:")
-#   print("     g1r_impulses:", g1r_impulses)
-#   print("     g2l_impulses:", g2l_impulses)
-    
     # plot options : splitview / all in one    
     if split_grips:
         optional_suffix += "_split"
@@ -502,50 +506,9 @@ def plot_impulses_bar(
         indices_g2 = np.arange(len(filtered_names_g2))
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
-
-        # Standardfarben
-        bar_colors_g1 = ["deepskyblue"] * len(filtered_g1)
-        bar_colors_g2 = ["coral"] * len(filtered_g2)
-
-        bars1 = ax1.bar(indices_g1, filtered_g1, color=bar_colors_g1, label="GR")
-        bars2 = ax2.bar(indices_g2, filtered_g2, color=bar_colors_g2, label="GL")
-
-        # Achsenbeschriftungen
-        ax1.set_title(f"{title} – {force} – GR")
-        ax2.set_title(f"{title} – {force} – GL")
-        ax2.set_ylabel(f"Impuls P{direction} {y_titel}")
-        ax1.set_xticks(indices_g1)
-        ax1.set_xticklabels(filtered_names_g1, rotation=25, ha="right")
-        ax2.set_xticks(indices_g2)
-        ax2.set_xticklabels(filtered_names_g2, rotation=25, ha="right")
-
-        # Gemeinsame y-Limits für beide Achsen setzen (auf Maximalbereich beider)
-        min_g1 = min(filtered_g1) if filtered_g1 else 0
-        max_g1 = max(filtered_g1) if filtered_g1 else 0
-        min_g2 = min(filtered_g2) if filtered_g2 else 0
-        max_g2 = max(filtered_g2) if filtered_g2 else 0
-        global_min = min(min_g1, min_g2)
-        global_max = max(max_g1, max_g2)
-        y_range = global_max - global_min
-        if y_range == 0:  # Alle Balken gleich oder leer
-            global_max = global_max * margin if global_max != 0 else margin
-            global_min = global_min * margin if global_min != 0 else 0
-        else:
-            buffer = y_range * (margin - 1) / 2
-            global_min -= buffer
-            global_max += buffer
-        ax1.set_ylim(global_min, global_max)
-        ax2.set_ylim(global_min, global_max)
-
-        # Werte und Kontaktzeiten als kleine graue Texte direkt über den Balken anzeigen
-        if show_values:
-            fontsize = 6
-            for bar, ct, g1 in zip(bars1, filtered_ct1, filtered_g1):
-                txt = f"{g1:.1f}\n({ct:.1f}s)"
-                ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt, ha="center", va="bottom", fontsize=fontsize, color="grey")
-            for bar, ct, g2 in zip(bars2, filtered_ct2, filtered_g2):
-                txt = f"{g2:.1f}\n({ct:.1f}s)"
-                ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt, ha="center", va="bottom", fontsize=fontsize, color="grey")
+        _plot_impulses_bar_split(ax1, ax2, indices_g1, filtered_names_g1, filtered_g1, filtered_ct1,
+                                 indices_g2, filtered_names_g2, filtered_g2, filtered_ct2,
+                                 force, title, direction, y_titel, margin, show_values)
     else:
         optional_suffix += "_combined"
         # Filtere Athleten, bei denen mindestens ein gültiger Impuls/Kontaktzeit vorhanden ist
@@ -562,44 +525,9 @@ def plot_impulses_bar(
                 filtered_ct1.append(ct1 if g1 != 0 and ct1 and ct1 > 0 else None)
                 filtered_ct2.append(ct2 if g2 != 0 and ct2 and ct2 > 0 else None)
         indices = np.arange(len(filtered_names))
-        width = 0.35
         fig, ax = plt.subplots(figsize=figsize)
-        # Erstelle Balken nebeneinander für G2L und G1R
-        bars2 = []
-        bars1 = []
-        bar_colors_g2 = []
-        bar_colors_g1 = []
-        # Erzeuge Farbliste: grau falls 0, sonst Standardfarbe
-        for g2, ct2 in zip(filtered_g2, filtered_ct2):
-            if g2 == 0 or ct2 is None or ct2 == 0:
-                bar_colors_g2.append("grey")
-            else:
-                bar_colors_g2.append("coral")
-        for g1, ct1 in zip(filtered_g1, filtered_ct1):
-            if g1 == 0 or ct1 is None or ct1 == 0:
-                bar_colors_g1.append("grey")
-            else:
-                bar_colors_g1.append("deepskyblue")
-        bars2 = ax.bar(indices - width/2, filtered_g2, width, color=bar_colors_g2, label="GL")
-        bars1 = ax.bar(indices + width/2, filtered_g1, width, color=bar_colors_g1, label="GR")
-        ax.set_xticks(indices)
-        ax.set_xticklabels(filtered_names, rotation=25, ha="right")
-        ax.set_ylabel(f"Impuls P{direction} {y_titel}")
-        ax.set_title(f"{title} – {force}")
-        ax.legend()
-        
-        # Werte und Kontaktzeiten als kleine Texte direkt über den Balken anzeigen
-        if show_values:
-            fontsize = 6
-            for i, (bar, ct, g2) in enumerate(zip(bars2, filtered_ct2, filtered_g2)):
-                    txt = f"{g2:.1f}"
-                    txt_ct = f"\n({ct:.1f}s)"
-                    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt + txt_ct, ha="center", va="bottom", fontsize=fontsize, color="grey")
-            for i, (bar, ct, g1) in enumerate(zip(bars1, filtered_ct1, filtered_g1)):
-                    txt = f"{g1:.1f}"
-                    txt_ct = f"\n({ct:.1f}s)"
-                    ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt + txt_ct, ha="center", va="bottom", fontsize=fontsize, color="grey")
-                
+        _plot_impulses_bar_combined(ax, indices, filtered_names, filtered_g1, filtered_g2, filtered_ct1,
+                                    filtered_ct2, force, title, direction, y_titel, margin, show_values)
 
     # Gemeinsame Nachbearbeitung für beide Plot-Arten
     plt.tight_layout()
@@ -615,3 +543,92 @@ def plot_impulses_bar(
         print(f"saving impulses bar plot to: {file_path}")
         fig.savefig(file_path)
     plt.show()
+
+
+# === Helper functions for plot_impulses_bar ===
+def _plot_impulses_bar_split(ax1, ax2, indices_g1, filtered_names_g1, filtered_g1, filtered_ct1,
+                             indices_g2, filtered_names_g2, filtered_g2, filtered_ct2,
+                             force, title, direction, y_title, margin, show_values):
+    # Standardfarben
+    bar_colors_g1 = ["deepskyblue"] * len(filtered_g1)
+    bar_colors_g2 = ["coral"] * len(filtered_g2)
+
+    bars1 = ax1.bar(indices_g1, filtered_g1, color=bar_colors_g1, label="GR")
+    bars2 = ax2.bar(indices_g2, filtered_g2, color=bar_colors_g2, label="GL")
+
+    # Achsenbeschriftungen
+    ax1.set_title(f"{title} – {force} – GR")
+    ax2.set_title(f"{title} – {force} – GL")
+    ax2.set_ylabel(f"Impuls P{direction} {y_title}")
+    ax1.set_xticks(indices_g1)
+    ax1.set_xticklabels(filtered_names_g1, rotation=25, ha="right")
+    ax2.set_xticks(indices_g2)
+    ax2.set_xticklabels(filtered_names_g2, rotation=25, ha="right")
+
+    # Gemeinsame y-Limits für beide Achsen setzen (auf Maximalbereich beider)
+    min_g1 = min(filtered_g1) if filtered_g1 else 0
+    max_g1 = max(filtered_g1) if filtered_g1 else 0
+    min_g2 = min(filtered_g2) if filtered_g2 else 0
+    max_g2 = max(filtered_g2) if filtered_g2 else 0
+    global_min = min(min_g1, min_g2)
+    global_max = max(max_g1, max_g2)
+    y_range = global_max - global_min
+    if y_range == 0:  # Alle Balken gleich oder leer
+        global_max = global_max * margin if global_max != 0 else margin
+        global_min = global_min * margin if global_min != 0 else 0
+    else:
+        buffer = y_range * (margin - 1) / 2
+        global_min -= buffer
+        global_max += buffer
+    ax1.set_ylim(global_min, global_max)
+    ax2.set_ylim(global_min, global_max)
+
+    # Werte und Kontaktzeiten als kleine graue Texte direkt über den Balken anzeigen
+    if show_values:
+        fontsize = 6
+        for bar, ct, g1 in zip(bars1, filtered_ct1, filtered_g1):
+            txt = f"{g1:.1f}\n({ct:.1f}s)"
+            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt, ha="center", va="bottom", fontsize=fontsize, color="grey")
+        for bar, ct, g2 in zip(bars2, filtered_ct2, filtered_g2):
+            txt = f"{g2:.1f}\n({ct:.1f}s)"
+            ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt, ha="center", va="bottom", fontsize=fontsize, color="grey")
+
+
+def _plot_impulses_bar_combined(ax, indices, filtered_names, filtered_g1, filtered_g2, filtered_ct1,
+                                filtered_ct2, force, title, direction, y_title, margin, show_values):
+    width = 0.35
+    # Erstelle Balken nebeneinander für G2L und G1R
+    bars2 = []
+    bars1 = []
+    bar_colors_g2 = []
+    bar_colors_g1 = []
+    # Erzeuge Farbliste: grau falls 0, sonst Standardfarbe
+    for g2, ct2 in zip(filtered_g2, filtered_ct2):
+        if g2 == 0 or ct2 is None or ct2 == 0:
+            bar_colors_g2.append("grey")
+        else:
+            bar_colors_g2.append("coral")
+    for g1, ct1 in zip(filtered_g1, filtered_ct1):
+        if g1 == 0 or ct1 is None or ct1 == 0:
+            bar_colors_g1.append("grey")
+        else:
+            bar_colors_g1.append("deepskyblue")
+    bars2 = ax.bar(indices - width/2, filtered_g2, width, color=bar_colors_g2, label="GL")
+    bars1 = ax.bar(indices + width/2, filtered_g1, width, color=bar_colors_g1, label="GR")
+    ax.set_xticks(indices)
+    ax.set_xticklabels(filtered_names, rotation=25, ha="right")
+    ax.set_ylabel(f"Impuls P{direction} {y_title}")
+    ax.set_title(f"{title} – {force}")
+    ax.legend()
+
+    # Werte und Kontaktzeiten als kleine Texte direkt über den Balken anzeigen
+    if show_values:
+        fontsize = 6
+        for i, (bar, ct, g2) in enumerate(zip(bars2, filtered_ct2, filtered_g2)):
+            txt = f"{g2:.1f}"
+            txt_ct = f"\n({ct:.1f}s)"
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt + txt_ct, ha="center", va="bottom", fontsize=fontsize, color="grey")
+        for i, (bar, ct, g1) in enumerate(zip(bars1, filtered_ct1, filtered_g1)):
+            txt = f"{g1:.1f}"
+            txt_ct = f"\n({ct:.1f}s)"
+            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt + txt_ct, ha="center", va="bottom", fontsize=fontsize, color="grey")
