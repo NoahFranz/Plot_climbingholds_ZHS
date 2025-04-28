@@ -78,15 +78,28 @@ Rückgabe:
         file_name = os.path.splitext(os.path.basename(file_path))[0]
         kgclimber = None
         climberforce = None
-        match = re.search(r"_(\d+)kg", file_name)
-        if match:
-            
-            kgclimber = int(match.group(1))
-            climberforce = kgclimber*9.81
-            print("climbersweight ", kgclimber)
-            print("climberforce ", climberforce)
+        weight_match = re.search(r"_(\d+)kg", file_name)
+        athlete_match = re.weight_match(r"([^_]+)_", file_name)
+        # Athlete-Name extrahieren
+        athlete_name = athlete_match.group(1) if athlete_match else "Unbekannt"
+        if athlete_match:
+            print("Athlet:", athlete_name)
         else:
-            print(f"⚠️ Kein Gewicht im Dateinamen gefunden für {file_name}.")
+            print("Kein Athlet gefunden")
+
+        # Gewicht extrahieren und Kraft berechnen
+        if weight_match:
+            kgclimber = int(weight_match.group(1))
+            climberforce = kgclimber * 9.81
+            print("Gewicht (kg):", kgclimber)
+            print("climberforce:", climberforce)
+        else:
+            kgclimber = 100
+            climberforce = 100
+            print("Kein Gewicht gefunden")
+
+        if not athlete_match or not weight_match:
+            print("file name is missing relevant information")
         print("file_name for weight regex:", file_name)
         #remove U and "comment" colums
         clean_df = clean_data(df)
@@ -105,15 +118,8 @@ Rückgabe:
         g1r = g1r.iloc[:min_len].reset_index(drop=True)
         g2l = g2l.iloc[:min_len].reset_index(drop=True)
 
-        def apply_filter(df):
-            df_filtered = df.copy()
-            for col in df.columns:
-                if col != "Time [s]":
-                    df_filtered[col] = savgol_filter(df[col], window_length=SVGwindowlength, polyorder=SVGpolyorder, mode="interp")
-            return df_filtered
-
         if usefilter:
-            g1r_filtered = apply_filter(g1r)
+            g1r_filtered = apply_filter(g1r,SVGwindowlength, SVGpolyorder, mode='interp' )
             g2l_filtered = apply_filter(g2l)
             data_dict[file_name] = {
                 "G1R": {"data": g1r_filtered, "stats": get_min_max_values_per_column(g1r_filtered)},
@@ -126,6 +132,9 @@ Rückgabe:
             }
         # Gewicht als Integer im Dict speichern
         data_dict[file_name]["climberforce"] = climberforce
+
+        # save athelete name in dict
+        data_dict[file_name]["Athletename"] = athlete_name
 
         # Falls gewünscht: Normiere alle Kräfte (Fy, Fz, Fx) auf das Kletterergewicht (climberforce)
         if normalizeByweight:
@@ -267,3 +276,11 @@ def calc_resultant_fy_fz(current_dict):
 
                 df.loc[:, "Fres"] = fres
                 df.loc[:, "φ_yz"] = phiyz
+
+
+def apply_filter(df, windowlength, polyorder, mode="interp"):
+    df_filtered = df.copy()
+    for col in df.columns:
+        if col != "Time [s]":
+            df_filtered[col] = savgol_filter(df[col], window_length=windowlength, polyorder=polyorder, mode=mode)
+    return df_filtered
