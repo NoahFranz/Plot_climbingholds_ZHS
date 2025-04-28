@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import math
 import os
+import numpy as np
 
 DEFAULT_FIGSIZE = (6.3, 8)
 
@@ -221,4 +222,25 @@ def export_figure_data_as_mat(fig, filename="figure_export.mat"):
         if isinstance(lst, list) and len(lst) > 0:
             return lst[0]
         return 0
+
+
+def find_max_impulse_interval_length(impulses, intervals):
+    """
+    Findet zu einer Liste von Impulsen und Kontaktintervallen das Zeitintervall des maximalen Impulses
+    und berechnet dessen Dauer (auf 1 Nachkommastelle gerundet).
+
+    Args:
+        impulses: Liste von Impulswerten (float)
+        intervals: Liste von (start, end)-Tupeln, in Sekunden
+
+    Returns:
+        (t0, t1, length): Start- und Endzeit des Intervalls und die Dauer in Sekunden (float, float, float)
+        Falls Eingaben leer oder inkonsistent: (None, None, None)
+    """
+    if not impulses or not intervals or len(impulses) != len(intervals):
+        return None, None, None
+    max_idx = int(np.argmax(impulses))
+    t0, t1 = intervals[max_idx]
+    interval_length = round(t1 - t0, 1)
+    return t0, t1, interval_length
 

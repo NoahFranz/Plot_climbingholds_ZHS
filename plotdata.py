@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import math
 from plotUITLS import*
-from plotUITLS import compute_ylimits
 from matplotlib.colors import to_rgb
 from typing import List, Dict, Any, Optional, Tuple, Union
 import numpy as np
@@ -157,7 +156,7 @@ def plot_data_per_hold(
     save_folder: str = ".",
     cutoff: Optional[Dict[str, float]] = None,
     normalizebyweight: bool = False,
-    show_intervals: bool = False
+    show_contact_time: bool = False
 ) -> None:
     """
     Erstellt eine Figure mit separaten Subplots für den linken (G2L) und rechten Griff (G1R).
@@ -242,11 +241,11 @@ def plot_data_per_hold(
                 mz_df_left = plot_dict["G2L"]["data"][mz_cols]
                 y_min_mz_left, y_max_mz_left = compute_ylimits(mz_df_left, margin=margin)
                 sec_ax_left.set_ylim([y_min_mz_left, y_max_mz_left])
-            # Optional: Interval shading (support multiple intervals per force)
-            if show_intervals:
-                intervals = plot_dict["G2L"].get("intervals", {})
+            # Optional: contact_time shading (support multiple contact_time per force)
+            if show_contact_time:
+                contact_time = plot_dict["G2L"].get("contact_time", {})
                 for force in forces_g2:
-                    ivals = intervals.get(force, [])
+                    ivals = contact_time.get(force, [])
                     for (t0, t1) in ivals:
                         ax_left.axvspan(t0, t1,
                                         color=get_color_for(force, "G2L"),
@@ -286,11 +285,11 @@ def plot_data_per_hold(
                     mz_df_right = plot_dict["G1R"]["data"][mz_cols]
                     y_min_mz_right, y_max_mz_right = compute_ylimits(mz_df_right, margin=margin)
                     sec_ax_right.set_ylim([y_min_mz_right, y_max_mz_right])
-                # Optional: Interval shading (support multiple intervals per force)
-                if show_intervals:
-                    intervals = plot_dict["G1R"].get("intervals", {})
+                # Optional: contact_time shading (support multiple contact_time per force)
+                if show_contact_time:
+                    contact_time = plot_dict["G1R"].get("contact_time", {})
                     for force in forces_g1:
-                        ivals = intervals.get(force, [])
+                        ivals = contact_time.get(force, [])
                         for (t0, t1) in ivals:
                             ax_right.axvspan(t0, t1,
                                              color=get_color_for(force, "G1R"),
@@ -322,7 +321,7 @@ def plot_selected_forces_comparison(
     margin: float = 1.2,
     cutoff: Optional[Dict[str, float]] = None,
     normalizebyweight: bool = False,
-    show_intervals: bool = False
+    show_contact_time: bool = False
 ) -> None:
     """
     Erstellt Vergleichsplots für die ausgewählten Kräfte der beiden Griffe.
@@ -387,20 +386,20 @@ def plot_selected_forces_comparison(
             ], axis=1)
             y_min_cmp, y_max_cmp = compute_ylimits(df_cmp, margin=margin)
             ax.set_ylim([y_min_cmp, y_max_cmp])
-        # Optional: Interval shading
-        if show_intervals:
-            intervals_g1 = file_dict["G1R"].get("intervals", {})
-            intervals_g2 = file_dict["G2L"].get("intervals", {})
+        # Optional: contact_time shading
+        if show_contact_time:
+            contact_time_g1 = file_dict["G1R"].get("contact_time", {})
+            contact_time_g2 = file_dict["G2L"].get("contact_time", {})
             # Top axis corresponds to first force
             force_top = allForcesList[0]
-            if force_top in intervals_g1:
-                t0, t1 = intervals_g1[force_top]
+            if force_top in contact_time_g1:
+                t0, t1 = contact_time_g1[force_top]
                 axes[0].axvspan(t0, t1, color=get_color_for(force_top, "G1R"), alpha=0.15)
             # Bottom axis corresponds to second force
             if len(allForcesList) > 1:
                 force_bot = allForcesList[1]
-                if force_bot in intervals_g2:
-                    t0, t1 = intervals_g2[force_bot]
+                if force_bot in contact_time_g2:
+                    t0, t1 = contact_time_g2[force_bot]
                     axes[1].axvspan(t0, t1, color=get_color_for(force_bot, "G2L"), alpha=0.15)
 
         # Top plot axis
@@ -440,23 +439,37 @@ def plot_impulses_bar(
     print("\n +++++++++ in plot_impulse_bar ++++++++++")
     athlete_names = []
     g1r_impulses, g2l_impulses = [], []
+    contact_times_g1 = []
+    contact_times_g2 = []
    # athlete_idx = 1
     for fname, dct in all_lvm_data_dict.items():
         #get athletename of file
         curr_ath_name = all_lvm_data_dict[fname]["athletename"]
 
+        #Impuls listen
         g1_imp_list = dct.get("G1R", {}).get("impulses", {}).get(force, [])[force]
         g2_imp_list = dct.get("G2L", {}).get("impulses", {}).get(force, [])[force]
-      #  print("g1_imp_dict= ",type(g1_imp_dict), g1_imp_dict)
-        # Wenn kein Impuls vorhanden, überspringen
-      # if not g1_imp_dict or not g2_imp_dict:
-      #     continue
-        # Falls mehrere Intervalle: nimm nur den ersten
-        g1_imp = max(g1_imp_list) if g1_imp_list else 0
-        g2_imp = max(g2_imp_list) if g2_imp_list else 0
+
+         # Kontaktzeiten als Liste von (start, end)
+        g1_intervals = dct.get("G1R", {}).get("contact_time", {}).get(force, [])
+        g2_intervals = dct.get("G2L", {}).get("contact_time", {}).get(force, [])
+
+        # Falls mehrere contact_time: nimm nur den größten
+        g1_imp = max(g1_imp_list, key = abs) if g1_imp_list else 0
+        g2_imp = max(g2_imp_list, key = abs) if g2_imp_list else 0
+        
+        # Kontaktzeit des maximalen Impulses
+        g1_ct = find_max_impulse_interval_length(g1_imp_list, g1_intervals)
+        g2_ct = find_max_impulse_interval_length(g2_imp_list, g2_intervals)
+        contact_times_g1.append(g1_ct)
+        contact_times_g2.append(g2_ct)
+
         print(f"[DEBUG] Datei: {fname}")
       #  print(f"        | G1R Impuls-dict: {g1_imp_dict} | G2L Impuls-dict: {g2_imp_dict}")
         print(f"        | G1R g1_imp: {g1_imp} | G2L g2_imp: {g2_imp}")
+
+
+
         athlete_names.append(curr_ath_name)
         #athlete_idx += 1
         g1r_impulses.append(g1_imp)
@@ -495,10 +508,12 @@ def plot_impulses_bar(
         ax.set_title(title)
         ax.legend()
         if show_values:
-            for i, val in enumerate(g1r_impulses):
-                ax.text(i - width/2, val, f"{val:.1f}", ha="center", va="bottom")
-            for i, val in enumerate(g2l_impulses):
-                ax.text(i + width/2, val, f"{val:.1f}", ha="center", va="bottom")
+          for i, (val, ct) in enumerate(zip(g1r_impulses, contact_times_g1)):
+              txt = f"{val:.1f}\n({ct}s)" if ct is not None else f"{val:.1f}"
+              ax.text(i - width/2, val, txt, ha="center", va="bottom")
+          for i, (val, ct) in enumerate(zip(g2l_impulses, contact_times_g2)):
+              txt = f"{val:.1f}\n({ct}s)" if ct is not None else f"{val:.1f}"
+              ax.text(i + width/2, val, txt, ha="center", va="bottom")
         plt.tight_layout()
         plt.show()
         

@@ -2,7 +2,7 @@ import pandas as pd
 import os
 import glob
 from utils import clean_data, get_min_max_values_per_column
-from utils import get_force_intervals, compute_impulses_per_interval
+from utils import get_force_contact_times, compute_impulses_per_contact
 from scipy.signal import savgol_filter
 import numpy as np
 import re
@@ -152,55 +152,55 @@ Rückgabe:
         # calc_FgR(data_dict)
         calc_resultant_fy_fz(data_dict)
 
-    # Berechne und speichere die Aktivitätsintervalle für jede Kraft pro Griff
+    # Berechne und speichere die Aktivitäts-Kontaktzeiten für jede Kraft pro Griff
     force_keys = ["Fy", "Fx", "Fz", "Mz"]
     for fname, file_data in data_dict.items():
-        intervals_g1 = get_force_intervals(file_data["G1R"]["data"], force_keys)
-        # Debug: Print intervals for G1R (multiple intervals per force)
-        print(f"[Intervalle] Datei '{fname}' G1R:")
-        for force, ivals in intervals_g1.items():
-            if not ivals:
-                print(f"  {force}: keine Intervalle gefunden")
+        contact_times_g1 = get_force_contact_times(file_data["G1R"]["data"], force_keys)
+        # Debug: Print Kontaktzeiten for G1R (multiple Kontaktzeiten per force)
+        print(f"[Kontaktzeiten] Datei '{fname}' G1R:")
+        for force, ctimes in contact_times_g1.items():
+            if not ctimes:
+                print(f"  {force}: keine Kontaktzeiten gefunden")
             else:
-                for idx, (t0, t1) in enumerate(ivals):
+                for idx, (t0, t1) in enumerate(ctimes):
                     print(f"  {force} [{idx}]: Start = {t0:.2f}s, Ende = {t1:.2f}s")
-        file_data["G1R"]["intervals"] = intervals_g1
-        intervals_g2 = get_force_intervals(file_data["G2L"]["data"], force_keys)
-        # Debug: Print intervals for G2L (multiple intervals per force)
-        print(f"[Intervalle] Datei '{fname}' G2L:")
-        for force, ivals in intervals_g2.items():
-            if not ivals:
-                print(f"  {force}: keine Intervalle gefunden")
+        file_data["G1R"]["contact_time"] = contact_times_g1
+        contact_times_g2 = get_force_contact_times(file_data["G2L"]["data"], force_keys)
+        # Debug: Print Kontaktzeiten for G2L (multiple Kontaktzeiten per force)
+        print(f"[Kontaktzeiten] Datei '{fname}' G2L:")
+        for force, ctimes in contact_times_g2.items():
+            if not ctimes:
+                print(f"  {force}: keine Kontaktzeiten gefunden")
             else:
-                for idx, (t0, t1) in enumerate(ivals):
+                for idx, (t0, t1) in enumerate(ctimes):
                     print(f"  {force} [{idx}]: Start = {t0:.2f}s, Ende = {t1:.2f}s")
-        file_data["G2L"]["intervals"] = intervals_g2
+        file_data["G2L"]["contact_time"] = contact_times_g2
 
-        # Impuls-Berechnung pro Griff für jedes erkannte Intervall
-        # G1R: compute impulses per interval per force
+        # Impuls-Berechnung pro Griff für jede erkannte Kontaktzeit
+        # G1R: compute impulses per contact_time per force
         impulses_dict_g1 = {}
-        for force, ivals in intervals_g1.items():
-            # berechne Impulse aller Kräfte in diesen Intervallen
+        for force, ctimes in contact_times_g1.items():
+            # berechne Impulse aller Kräfte in diesen Kontaktzeiten
             per_comp = {}
             for comp in force_keys:
-                per_comp[comp] = compute_impulses_per_interval(
-                    file_data["G1R"]["data"], ivals, comp
+                per_comp[comp] = compute_impulses_per_contact(
+                    file_data["G1R"]["data"], ctimes, comp
                 )
             impulses_dict_g1[force] = per_comp
-            print(f"[Impuls-Intervalle] Datei '{fname}' G1R {force}: {per_comp}")
+            print(f"[Impuls-Kontaktzeiten] Datei '{fname}' G1R {force}: {per_comp}")
         file_data["G1R"]["impulses"] = impulses_dict_g1
 
-        # G2L: compute impulses per interval per force
+        # G2L: compute impulses per contact_time per force
         impulses_dict_g2 = {}
-        for force, ivals in intervals_g2.items():
-            # berechne Impulse aller Kräfte in diesen Intervallen
+        for force, ctimes in contact_times_g2.items():
+            # berechne Impulse aller Kräfte in diesen Kontaktzeiten
             per_comp = {}
             for comp in force_keys:
-                per_comp[comp] = compute_impulses_per_interval(
-                    file_data["G2L"]["data"], ivals, comp
+                per_comp[comp] = compute_impulses_per_contact(
+                    file_data["G2L"]["data"], ctimes, comp
                 )
             impulses_dict_g2[force] = per_comp
-            print(f"[Impuls-Intervalle] Datei '{fname}' G2L {force}: {per_comp}")
+            print(f"[Impuls-Kontaktzeiten] Datei '{fname}' G2L {force}: {per_comp}")
         file_data["G2L"]["impulses"] = impulses_dict_g2
 
         if save_plot:
@@ -211,14 +211,14 @@ Rückgabe:
                     f.write(f"Impulsdaten für Datei '{fname}'\n")
                     for side in ["G1R", "G2L"]:
                         f.write(f"\n{side}:\n")
-                        # Intervalle ausgeben
-                        intervals_side = file_data[side].get("intervals", {})
-                        for force_name, ivals in intervals_side.items():
-                            if ivals:
-                                ivals_str = ", ".join(f"({t0:.2f}-{t1:.2f}s)" for t0, t1 in ivals)
+                        # Kontaktzeiten ausgeben
+                        contact_times_side = file_data[side].get("contact_time", {})
+                        for force_name, ctimes in contact_times_side.items():
+                            if ctimes:
+                                ctimes_str = ", ".join(f"({t0:.2f}-{t1:.2f}s)" for t0, t1 in ctimes)
                             else:
-                                ivals_str = "keine Intervalle"
-                            f.write(f"  {force_name} Intervalle: {ivals_str}\n")
+                                ctimes_str = "keine Kontaktzeiten"
+                            f.write(f"  {force_name} Kontaktzeiten: {ctimes_str}\n")
                             # Impulse pro Komponente ausgeben
                             impulses_side = file_data[side]["impulses"].get(force_name, {})
                             for comp, vals in impulses_side.items():

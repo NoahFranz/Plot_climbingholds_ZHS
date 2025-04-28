@@ -196,7 +196,7 @@ def _find_last_active_segment(time: pd.Series,
                 last_valid = (g[time.name].iloc[0], g[time.name].iloc[-1])
     return last_valid
 
-def get_force_intervals(
+def get_force_contact_times(
     df: pd.DataFrame,
     forces: List[str],
     # Optional single absolute threshold for both start and end
@@ -210,11 +210,11 @@ def get_force_intervals(
     end_threshold: Optional[float] = None
 ) -> Dict[str, Tuple[float, float]]:
     """
-    Bestimmt Aktivitätsintervalle anhand von 'Fz' im DataFrame.
-    Nur die Kraft 'Fz' wird zur Detektion der Intervalle verwendet.
-    Für alle anderen Kräfte werden exakt dieselben Zeitabschnitte (Intervalle) verwendet wie für 'Fz'.
+    Bestimmt Kontaktzeiten anhand von 'Fz' im DataFrame.
+    Nur die Kraft 'Fz' wird zur Detektion der Kontaktzeiten verwendet.
+    Für alle anderen Kräfte werden exakt dieselben Zeitabschnitte (Kontaktzeiten) verwendet wie für 'Fz'.
     
-    Für jedes Intervall gilt zusätzlich:
+    Für jede Kontaktzeit gilt zusätzlich:
       - Das Intervall beginnt, wenn 'Fz' für mindestens start_dur Sekunden oberhalb des Startschwellwertes liegt.
       - Das Intervall endet, wenn 'Fz' für mindestens end_dur Sekunden unterhalb des Endschwellwertes bleibt.
       - Innerhalb des Intervalls muss 'Fz' mindestens einmal ≥ 5 betragen.
@@ -226,7 +226,7 @@ def get_force_intervals(
     start_threshold = 1.3
     end_threshold = 1.1
     forces = {"Fz"}
-    intervals = {}
+    contact_time = {}
     time = df[time_col]
     # If a single threshold is given, override only the start threshold
     if threshold is not None:
@@ -277,14 +277,14 @@ def get_force_intervals(
                 if Fz_cols and (df.loc[mask_interval, Fz_cols] >= 5).any().any():
                     force_intervals.append((t0, t1))
 
-        intervals[force] = force_intervals
+        contact_time[force] = force_intervals
 
-    return intervals
+    return contact_time
 
 
 def compute_impulses(
     df: pd.DataFrame,
-    intervals: dict,
+    contact_time: dict,
     forces: list,
     time_col: str = "Time [s]"
 ) -> dict:
@@ -293,7 +293,7 @@ def compute_impulses(
     
     Parameters:
       df         : DataFrame mit Time- und Kraftspalten
-      intervals  : dict mapping Kraftname → (t_start, t_end)
+      contact_time  : dict mapping Kraftname → (t_start, t_end)
       forces     : Liste der Kraftstichworte (z.B. ["Fy","Fx","Fz","Mz"])
       time_col   : Name der Zeitspalte (Default "Time [s]")
     
@@ -303,9 +303,9 @@ def compute_impulses(
     print("calculating impulses")
     impulses = {}
     for force in forces:
-        if force not in intervals:
+        if force not in contact_time:
             continue
-        t0, t1 = intervals[force]
+        t0, t1 = contact_time[force]
         # Subset des DataFrames auf das Intervall
         mask = (df[time_col] >= t0) & (df[time_col] <= t1)
         t_vals = df.loc[mask, time_col].values
@@ -321,17 +321,17 @@ def compute_impulses(
         print(f"[compute_impulses] {force}: Impuls = {imp:.2f}")
     return impulses
 
-def compute_impulses_per_interval(
+def compute_impulses_per_contact(
     df: pd.DataFrame,
-    intervals: list,
+    contact_time: list,
     force: str,
     time_col: str = "Time [s]"
 ) -> list:
     """
-    Berechnet den Impuls (Integral über Kraft·Zeit) für jedes Intervall in `intervals`.
+    Berechnet den Impuls (Integral über Kraft·Zeit) für jedes Intervall in `contact_time`.
     """
     impulses = []
-    for t0, t1 in intervals:
+    for t0, t1 in contact_time:
         mask = (df[time_col] >= t0) & (df[time_col] <= t1)
         t_vals = df.loc[mask, time_col].values
         cols = [c for c in df.columns if force in c]
