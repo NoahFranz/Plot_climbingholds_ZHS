@@ -156,7 +156,6 @@ Rückgabe:
     force_keys = ["Fy", "Fx", "Fz", "Mz"]
     for fname, file_data in data_dict.items():
         contact_times_g1 = get_force_contact_times(file_data["G1R"]["data"], force_keys)
-        # Debug: Print Kontaktzeiten for G1R (multiple Kontaktzeiten per force)
         print(f"[Kontaktzeiten] Datei '{fname}' G1R:")
         for force, ctimes in contact_times_g1.items():
             if not ctimes:
@@ -165,8 +164,10 @@ Rückgabe:
                 for idx, (t0, t1) in enumerate(ctimes):
                     print(f"  {force} [{idx}]: Start = {t0:.2f}s, Ende = {t1:.2f}s")
         file_data["G1R"]["contact_time"] = contact_times_g1
+        stats_g1 = compute_contact_time_stats_per_force(contact_times_g1)
+        file_data["G1R"]["contact_time_stats"] = stats_g1
+
         contact_times_g2 = get_force_contact_times(file_data["G2L"]["data"], force_keys)
-        # Debug: Print Kontaktzeiten for G2L (multiple Kontaktzeiten per force)
         print(f"[Kontaktzeiten] Datei '{fname}' G2L:")
         for force, ctimes in contact_times_g2.items():
             if not ctimes:
@@ -175,6 +176,8 @@ Rückgabe:
                 for idx, (t0, t1) in enumerate(ctimes):
                     print(f"  {force} [{idx}]: Start = {t0:.2f}s, Ende = {t1:.2f}s")
         file_data["G2L"]["contact_time"] = contact_times_g2
+        stats_g2 = compute_contact_time_stats_per_force(contact_times_g2)
+        file_data["G2L"]["contact_time_stats"] = stats_g2
 
         # Impuls-Berechnung pro Griff für jede erkannte Kontaktzeit
         # G1R: compute impulses per contact_time per force
@@ -284,3 +287,24 @@ def apply_filter(df, windowlength, polyorder, mode="interp"):
         if col != "Time [s]":
             df_filtered[col] = savgol_filter(df[col], window_length=windowlength, polyorder=polyorder, mode=mode)
     return df_filtered
+
+def compute_contact_time_stats_per_force(contact_time_dict):
+    """
+    Erwartet contact_time_dict = {'Fz': [(t0, t1), ...], ...}
+    Gibt ein Dict zurück: {'Fz': {'min':..., 'max':..., 'mean':...}, ...}
+    """
+    stats = {}
+    for force, intervals in contact_time_dict.items():
+        if not intervals:
+            stats[force] = {'min': 0, 'max': 0, 'mean': 0}
+            continue
+        durations = [round(t1-t0, 1) for t0, t1 in intervals if t1 > t0]
+        if durations:
+            stats[force] = {
+                'min': round(min(durations), 1),
+                'max': round(max(durations), 1),
+                'mean': round(sum(durations) / len(durations), 1)
+            }
+        else:
+            stats[force] = {'min': 0, 'max': 0, 'mean': 0}
+    return stats

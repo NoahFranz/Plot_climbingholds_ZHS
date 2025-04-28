@@ -242,5 +242,20 @@ def find_max_impulse_interval_length(impulses, intervals):
     max_idx = int(np.argmax(impulses))
     t0, t1 = intervals[max_idx]
     interval_length = round(t1 - t0, 1)
-    return t0, t1, interval_length
+    return interval_length
+
+
+def apply_barplot_style(ax, margin=1.2):
+    """
+    Setzt Standard-Layout für Barplots.
+    Erhöht y-Limit automatisch mit 'margin'.
+    """
+    ymin, ymax = ax.get_ylim()
+    y_range = ymax - ymin
+    new_ymax = ymax + (y_range * (margin - 1))
+    ax.set_ylim([ymin, new_ymax])
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.grid(axis='y', linestyle='--', alpha=0.5)
+    plt.tight_layout()
 
