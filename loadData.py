@@ -79,7 +79,7 @@ Rückgabe:
         kgclimber = None
         climberforce = None
         weight_match = re.search(r"_(\d+)kg", file_name)
-        athlete_match = re.weight_match(r"([^_]+)_", file_name)
+        athlete_match = re.match(r"([^_]+)_", file_name)
         # Athlete-Name extrahieren
         athlete_name = athlete_match.group(1) if athlete_match else "Unbekannt"
         if athlete_match:
@@ -120,7 +120,7 @@ Rückgabe:
 
         if usefilter:
             g1r_filtered = apply_filter(g1r,SVGwindowlength, SVGpolyorder, mode='interp' )
-            g2l_filtered = apply_filter(g2l)
+            g2l_filtered = apply_filter(g2l,SVGwindowlength, SVGpolyorder, mode='interp')
             data_dict[file_name] = {
                 "G1R": {"data": g1r_filtered, "stats": get_min_max_values_per_column(g1r_filtered)},
                 "G2L": {"data": g2l_filtered, "stats": get_min_max_values_per_column(g2l_filtered)},
