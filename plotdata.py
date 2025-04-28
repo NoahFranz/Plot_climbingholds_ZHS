@@ -5,6 +5,7 @@ from plotUITLS import*
 from matplotlib.colors import to_rgb
 from typing import List, Dict, Any, Optional, Tuple, Union
 import numpy as np
+import os  # für Dateisystemoperationen
 
 # plotdata.py: Sammlung von Funktionen zum Erstellen von Diagrammen für Kraft- und Impulsdaten
 # Diese Datei enthält:
@@ -402,12 +403,15 @@ def plot_selected_forces_comparison(
 # ======================================================
 def plot_impulses_bar(
     all_lvm_data_dict,
-    force="Fz",  # Oder "Fy" etc.
-    split_grips=False,  # True: oben/unten, False: gruppiert nebeneinander
-    show_values=True,
-    figsize=(8, 5),
-    title="Impulsvergleich"
-):
+    force: str = "Fz",  # Oder "Fy" etc.
+    split_grips: bool = False,  # True: oben/unten, False: gruppiert nebeneinander
+    show_values: bool = True,
+    figsize: Tuple[int, int] = (8, 5),
+    title: str = "Impulsvergleich",
+    optional_suffix: str = "",  # Optionaler Zusatz für Dateinamen
+    save_plot: bool = False,     # Speichern aktivieren
+    save_folder: str = "."      # Zielordner für gespeicherte Plots
+) -> None:
     """
     Erstellt ein Balkendiagramm der Impulse für mehrere Dateien (Athleten).
     """
@@ -458,6 +462,12 @@ def plot_impulses_bar(
                 ax2.text(i, val, f"{val:.1f}", ha="center", va="bottom")
         plt.xticks(indices, athlete_names, rotation=25, ha="right")
         plt.tight_layout()
+        # Plot speichern, falls in der GUI aktiviert
+        if save_plot:
+            filename = f"{title}{optional_suffix}.png"
+            file_path = os.path.join(save_folder, filename)
+            print(f"saving impulses bar plot to: {file_path}")
+            fig.savefig(file_path)
         plt.show()
     else:
         # Filtere Athleten, bei denen mindestens ein gültiger Impuls/Kontaktzeit vorhanden ist
@@ -499,6 +509,13 @@ def plot_impulses_bar(
                     if ct is not None:
                         txt += f"\n({ct:.1f}s)"
                     ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt, ha="center", va="bottom", fontsize=9)
-        # Stil anwenden, Achsenpuffer setzen und Plot anzeigen
+        # Stil anwenden, Achsenpuffer setzen
         apply_barplot_style(ax, margin=1.2)
+        # Plot speichern, falls in der GUI aktiviert
+        if save_plot:
+            optional_suffix = "_BAR"
+            filename = f"{title}{optional_suffix}.png"
+            file_path = os.path.join(save_folder, filename)
+            print(f"saving impulses bar plot to: {file_path}")
+            fig.savefig(file_path)
         plt.show()
