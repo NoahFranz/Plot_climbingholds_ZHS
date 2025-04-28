@@ -5,6 +5,8 @@ from plotUITLS import*
 from plotUITLS import compute_ylimits
 from matplotlib.colors import to_rgb
 from typing import List, Dict, Any, Optional, Tuple, Union
+import numpy as np
+
 
 import logging
 
@@ -416,3 +418,84 @@ def plot_selected_forces_comparison(
         plt.show()
     except Exception as e:
         logger.exception(f"plot_selected_forces_comparison failed for {filename}: {e}")
+
+def plot_impulses_bar(
+    all_lvm_data_dict,
+    force="Fz",  # Oder "Fy" etc.
+    split_grips=False,  # True: oben/unten, False: gruppiert nebeneinander
+    show_values=True,
+    figsize=(8, 5),
+    title="Impulsvergleich"
+):
+    """
+    Erstellt ein Balkendiagramm der Impulse für mehrere Dateien (Athleten).
+
+    Args:
+        all_lvm_data_dict: dict mit Datei → {'G1R': {'impulses': ...}, 'G2L': ...}
+        force: Name der betrachteten Kraft, z.B. "Fz"
+        split_grips: True = zwei Subplots, False = beide Griffe nebeneinander in einem Plot
+        show_values: True = Impulswerte über Balken anzeigen
+    """
+    # Sammle Impulse
+    print("\n +++++++++ in plot_impulse_bar ++++++++++")
+    athlete_names = []
+    g1r_impulses, g2l_impulses = [], []
+    athlete_idx = 1
+    for fname, dct in all_lvm_data_dict.items():
+        g1_imp_list = dct.get("G1R", {}).get("impulses", {}).get(force, [])[force]
+        g2_imp_list = dct.get("G2L", {}).get("impulses", {}).get(force, [])[force]
+      #  print("g1_imp_dict= ",type(g1_imp_dict), g1_imp_dict)
+        # Wenn kein Impuls vorhanden, überspringen
+      # if not g1_imp_dict or not g2_imp_dict:
+      #     continue
+        # Falls mehrere Intervalle: nimm nur den ersten
+        g1_imp = max(g1_imp_list) if g1_imp_list else 0
+        g2_imp = max(g2_imp_list) if g2_imp_list else 0
+        print(f"[DEBUG] Datei: {fname}")
+      #  print(f"        | G1R Impuls-dict: {g1_imp_dict} | G2L Impuls-dict: {g2_imp_dict}")
+        print(f"        | G1R g1_imp: {g1_imp} | G2L g2_imp: {g2_imp}")
+        athlete_names.append(f"Athlet {athlete_idx}")
+        athlete_idx += 1
+        g1r_impulses.append(g1_imp)
+        g2l_impulses.append(g2_imp)
+
+    print("\n IMPULS die geplottert werden:")
+    print("     g1r_impulses:", g1r_impulses)
+    print("     g2l_impulses:", g2l_impulses)
+    indices = np.arange(len(athlete_names))
+
+    if split_grips:
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
+        ax1.bar(indices, g1r_impulses, color="deepskyblue", label="G1R")
+        ax1.set_ylabel("Impuls G1R ['%'s]")
+        ax1.set_title(title + " – G1R")
+        if show_values:
+            for i, val in enumerate(g1r_impulses):
+                ax1.text(i, val, f"{val:.1f}", ha="center", va="bottom")
+        ax2.bar(indices, g2l_impulses, color="coral", label="G2L")
+        ax2.set_ylabel("Impuls G2L ['%'s]")
+        ax2.set_title(title + " – G2L")
+        if show_values:
+            for i, val in enumerate(g2l_impulses):
+                ax2.text(i, val, f"{val:.1f}", ha="center", va="bottom")
+        plt.xticks(indices, athlete_names, rotation=25, ha="right")
+        plt.tight_layout()
+        plt.show()
+    else:
+        width = 0.35
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.bar(indices - width/2, g1r_impulses, width, label="G1R", color="deepskyblue")
+        ax.bar(indices + width/2, g2l_impulses, width, label="G2L", color="coral")
+        ax.set_xticks(indices)
+        ax.set_xticklabels(athlete_names, rotation=25, ha="right")
+        ax.set_ylabel("Impuls ['%'s]")
+        ax.set_title(title)
+        ax.legend()
+        if show_values:
+            for i, val in enumerate(g1r_impulses):
+                ax.text(i - width/2, val, f"{val:.1f}", ha="center", va="bottom")
+            for i, val in enumerate(g2l_impulses):
+                ax.text(i + width/2, val, f"{val:.1f}", ha="center", va="bottom")
+        plt.tight_layout()
+        plt.show()
+        
