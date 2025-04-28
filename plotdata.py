@@ -440,8 +440,11 @@ def plot_impulses_bar(
     print("\n +++++++++ in plot_impulse_bar ++++++++++")
     athlete_names = []
     g1r_impulses, g2l_impulses = [], []
-    athlete_idx = 1
+   # athlete_idx = 1
     for fname, dct in all_lvm_data_dict.items():
+        #get athletename of file
+        curr_ath_name = all_lvm_data_dict[fname]["athletename"]
+
         g1_imp_list = dct.get("G1R", {}).get("impulses", {}).get(force, [])[force]
         g2_imp_list = dct.get("G2L", {}).get("impulses", {}).get(force, [])[force]
       #  print("g1_imp_dict= ",type(g1_imp_dict), g1_imp_dict)
@@ -454,8 +457,8 @@ def plot_impulses_bar(
         print(f"[DEBUG] Datei: {fname}")
       #  print(f"        | G1R Impuls-dict: {g1_imp_dict} | G2L Impuls-dict: {g2_imp_dict}")
         print(f"        | G1R g1_imp: {g1_imp} | G2L g2_imp: {g2_imp}")
-        athlete_names.append(f"Athlet {athlete_idx}")
-        athlete_idx += 1
+        athlete_names.append(curr_ath_name)
+        #athlete_idx += 1
         g1r_impulses.append(g1_imp)
         g2l_impulses.append(g2_imp)
 
