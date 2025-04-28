@@ -134,7 +134,7 @@ Rückgabe:
         data_dict[file_name]["climberforce"] = climberforce
 
         # save athelete name in dict
-        data_dict[file_name]["Athletename"] = athlete_name
+        data_dict[file_name]["athletename"] = athlete_name
 
         # Falls gewünscht: Normiere alle Kräfte (Fy, Fz, Fx) auf das Kletterergewicht (climberforce)
         if normalizeByweight:
