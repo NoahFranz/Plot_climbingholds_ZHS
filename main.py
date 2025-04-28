@@ -61,10 +61,15 @@ def main():
             plot_impulses_bar(
             all_lvm_data_dict,
             force="Fz",           # ODER "Fy" usw.
-            split_grips=False,    # Nur ein Plot, beide Griffe nebeneinander
+            split_grips=True,    # Nur ein Plot, beide Griffe nebeneinander
             show_values=True,     # Werte über Balken anzeigen
             figsize=(10, 6),      # Plotgröße
-            title="Impulsvergleich aller Athleten"
+            title="Impulsvergleich aller Athleten",
+            normalizebyweight=normalizebyweight,
+            save_folder=save_folder,
+            save_plot=plot_settings["save"],
+            optional_suffix=optional_suffix
+            
         )
         else:    
             # Fall 1: Normale kombinierte Darstellung von G1R und G2L (kein Split, kein Vergleich)

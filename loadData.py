@@ -156,12 +156,14 @@ Rückgabe:
     force_keys = ["Fy", "Fx", "Fz", "Mz"]
     for fname, file_data in data_dict.items():
         contact_times_g1 = get_force_contact_times(file_data["G1R"]["data"], force_keys)
-        print(f"[Kontaktzeiten] Datei '{fname}' G1R:")
+      #  print(f"[Kontaktzeiten] Datei '{fname}' G1R:")
         for force, ctimes in contact_times_g1.items():
             if not ctimes:
                 print(f"  {force}: keine Kontaktzeiten gefunden")
             else:
+                continue
                 for idx, (t0, t1) in enumerate(ctimes):
+                    
                     print(f"  {force} [{idx}]: Start = {t0:.2f}s, Ende = {t1:.2f}s")
         file_data["G1R"]["contact_time"] = contact_times_g1
         stats_g1 = compute_contact_time_stats_per_force(contact_times_g1)
@@ -190,7 +192,7 @@ Rückgabe:
                     file_data["G1R"]["data"], ctimes, comp
                 )
             impulses_dict_g1[force] = per_comp
-            print(f"[Impuls-Kontaktzeiten] Datei '{fname}' G1R {force}: {per_comp}")
+           # print(f"[Impuls-Kontaktzeiten] Datei '{fname}' G1R {force}: {per_comp}")
         file_data["G1R"]["impulses"] = impulses_dict_g1
 
         # G2L: compute impulses per contact_time per force
@@ -203,7 +205,7 @@ Rückgabe:
                     file_data["G2L"]["data"], ctimes, comp
                 )
             impulses_dict_g2[force] = per_comp
-            print(f"[Impuls-Kontaktzeiten] Datei '{fname}' G2L {force}: {per_comp}")
+            #print(f"[Impuls-Kontaktzeiten] Datei '{fname}' G2L {force}: {per_comp}")
         file_data["G2L"]["impulses"] = impulses_dict_g2
 
         if save_plot:

@@ -259,3 +259,24 @@ def apply_barplot_style(ax, margin=1.2):
     ax.grid(axis='y', linestyle='--', alpha=0.5)
     plt.tight_layout()
 
+
+def map_force_to_axis(force: str) -> str:
+    """
+    Wandelt einen Kraftnamen in den zugehörigen Achsenbuchstaben um.
+    Beispiele:
+      - "Fz" → "z"
+      - "Fy" → "y"
+      - "Fx" → "x"
+      - "Mz" → "mz"
+    Ist der Kraftname nicht bekannt, wird ein leerer String zurückgegeben.
+    """
+    mapping = {
+        "Fz": "z",
+        "Fy": "y",
+        "Fx": "x",
+        "Mz": "mz"
+    }
+    # Normalisiere Eingabe auf Groß-/Kleinschreibung
+    key = force.strip().capitalize()
+    return mapping.get(key, "")
+
