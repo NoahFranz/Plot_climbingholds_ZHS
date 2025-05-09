@@ -34,7 +34,15 @@ def main():
     unique_force_list = get_unique_selected_forces(forces_to_plot=forces_to_plot)
     print(" unqiue_force_lsit ",unique_force_list )
 
-    all_lvm_data_dict = load_lvm_data(folder_path, filter_settings["window_length"], filter_settings["polyorder"], usefilter = filter_settings["use_filter"], normalizeByweight = filter_settings["normalize_by_weight"], save_plot=plot_settings["save"])
+    settings = {
+        "SVGwindowlength": filter_settings["window_length"],
+        "SVGpolyorder": filter_settings["polyorder"],
+        "usefilter": filter_settings["use_filter"],
+        "normalizeByweight": filter_settings["normalize_by_weight"],
+        "save_plot": plot_settings["save"],
+        "autotrim": filter_settings["autotrim"]
+    }
+    all_lvm_data_dict = load_lvm_data(folder_path, settings=settings)
 
     if filter_settings["use_filter"]:
         optional_suffix += "_filtered_with-" + str(filter_settings["window_length"]) + "-" + str(filter_settings["polyorder"])
@@ -43,6 +51,7 @@ def main():
     if cutoff.get("active", False):
         optional_suffix += f"_trimmed-S{cutoff['start']}-E{cutoff['end']}"
 
+    
     all_lvm_data_dict, forces_g1, forces_g2 = prepare_data(all_lvm_data_dict, forces_to_plot, cutoff)
     if all_lvm_data_dict is None:
         return
