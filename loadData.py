@@ -16,6 +16,11 @@ import re
 
 
 
+def split_grip_sides(df):
+    g1r = df[["Time [s]"] + [col for col in df.columns if "1" in col]]
+    g2l = df[["Time [s]"] + [col for col in df.columns if "2" in col]]
+    return g1r, g2l
+
 def load_lvm_data(folder_path, *, settings):
     """
 Lädt .lvm-Dateien aus dem angegebenen Verzeichnis und bereitet sie für die spätere Analyse auf.
@@ -74,8 +79,7 @@ Rückgabe:
         # print(clean_df)
         clean_df = trim_low_force_periods(clean_df, threshold=10, min_duration=3, buffer=2)
 
-        g1r = clean_df[["Time [s]"] + [col for col in clean_df.columns if "1" in col]]
-        g2l = clean_df[["Time [s]"] + [col for col in clean_df.columns if "2" in col]]
+        g1r, g2l = split_grip_sides(clean_df)
 
         # Gemeinsames Zeitintervall für beide Griffe bestimmen
         start_g1r, end_g1r = get_flank_time_range(g1r)
