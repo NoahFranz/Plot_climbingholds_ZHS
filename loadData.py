@@ -1,3 +1,32 @@
+def export_impulse_data(file_data, fname, folder_path):
+    date_match = re.search(r"(\d{2})-(\d{2})-(\d{2})", fname)
+    if date_match:
+        yy, mm, dd = date_match.groups()
+        date_str = f"{dd}_{mm}_{yy}_impulses"
+    else:
+        date_str = "unknown_date_impulses"
+    impulse_dir = os.path.join(folder_path, date_str)
+    os.makedirs(impulse_dir, exist_ok=True)
+    txt_path = os.path.join(impulse_dir, f"{fname}_impulses.txt")
+    try:
+        with open(txt_path, "w") as f:
+            f.write(f"Impulsdaten für Datei '{fname}'\n")
+            for side in ["G1R", "G2L"]:
+                f.write(f"\n{side}:\n")
+                contact_times_side = file_data[side].get("contact_time", {})
+                for force_name, ctimes in contact_times_side.items():
+                    if ctimes:
+                        ctimes_str = ", ".join(f"({t0:.2f}-{t1:.2f}s)" for t0, t1 in ctimes)
+                    else:
+                        ctimes_str = "keine Kontaktzeiten"
+                    f.write(f"  {force_name} Kontaktzeiten: {ctimes_str}\n")
+                    impulses_side = file_data[side]["impulses"].get(force_name, {})
+                    for comp, vals in impulses_side.items():
+                        vals_str = ", ".join(f"{v:.1f}" for v in vals)
+                        f.write(f"    {comp}: [{vals_str}]\n")
+        print(f"Impulsdaten gespeichert in: {txt_path}")
+    except Exception as e:
+        print(f"Fehler beim Schreiben der Impulsdatei '{txt_path}': {e}")
 
 def prepare_time_column(df, autotrim=True):
     df["Time [s]"] = correct_time_jumps(df["Time [s]"])
@@ -187,38 +216,7 @@ Rückgabe:
         file_data["G2L"]["impulses"] = impulses_dict_g2
 
         if save_plot:
-            # --- Export impulse data to text file ---
-            # Extrahiere Datum aus dem Dateinamen (Format: YY-MM-DD)
-            date_match = re.search(r"(\d{2})-(\d{2})-(\d{2})", fname)
-            if date_match:
-                yy, mm, dd = date_match.groups()
-                date_str = f"{dd}_{mm}_{yy}_impulses"
-            else:
-                date_str = "unknown_date_impulses"
-            impulse_dir = os.path.join(folder_path, date_str)
-            os.makedirs(impulse_dir, exist_ok=True)
-            txt_path = os.path.join(impulse_dir, f"{fname}_impulses.txt")
-            try:
-                with open(txt_path, "w") as f:
-                    f.write(f"Impulsdaten für Datei '{fname}'\n")
-                    for side in ["G1R", "G2L"]:
-                        f.write(f"\n{side}:\n")
-                        # Kontaktzeiten ausgeben
-                        contact_times_side = file_data[side].get("contact_time", {})
-                        for force_name, ctimes in contact_times_side.items():
-                            if ctimes:
-                                ctimes_str = ", ".join(f"({t0:.2f}-{t1:.2f}s)" for t0, t1 in ctimes)
-                            else:
-                                ctimes_str = "keine Kontaktzeiten"
-                            f.write(f"  {force_name} Kontaktzeiten: {ctimes_str}\n")
-                            # Impulse pro Komponente ausgeben
-                            impulses_side = file_data[side]["impulses"].get(force_name, {})
-                            for comp, vals in impulses_side.items():
-                                vals_str = ", ".join(f"{v:.1f}" for v in vals)
-                                f.write(f"    {comp}: [{vals_str}]\n")
-                print(f"Impulsdaten gespeichert in: {txt_path}")
-            except Exception as e:
-                print(f"Fehler beim Schreiben der Impulsdatei '{txt_path}': {e}")
+            export_impulse_data(file_data, fname, folder_path)
 
     return data_dict if data_dict else None
 
