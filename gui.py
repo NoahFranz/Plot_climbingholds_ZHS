@@ -61,6 +61,31 @@ def run_gui():
     signal_frame = tk.LabelFrame(scrollable_frame, text="Signal-Optionen")
     signal_frame.pack(pady=5, padx=10, fill="x", anchor="center")
 
+    # Option zum manuellen Setzen der Y-Achsenlimits (nach Trimmen-Checkbox)
+    set_y_limits_var = tk.BooleanVar(value=False)
+
+    def toggle_y_limits_options():
+        if set_y_limits_var.get():
+            y_limits_frame.pack(pady=5, padx=10, fill="x")
+        else:
+            y_limits_frame.pack_forget()
+
+    set_y_limits_checkbox = tk.Checkbutton(signal_frame, text="Y-Achsenlimits setzen?", variable=set_y_limits_var, command=toggle_y_limits_options)
+    set_y_limits_checkbox.pack(anchor="center", pady=2, padx=5)
+
+    y_limits_frame = tk.LabelFrame(signal_frame, text="Y-Achsenlimits")
+
+    y_min_var = tk.DoubleVar(value=0.0)
+    y_max_var = tk.DoubleVar(value=0.0)
+
+    tk.Label(y_limits_frame, text="Y min:").pack(anchor="w", padx=5)
+    y_min_entry = tk.Entry(y_limits_frame, textvariable=y_min_var)
+    y_min_entry.pack(fill="x", padx=5)
+
+    tk.Label(y_limits_frame, text="Y max:").pack(anchor="w", padx=5)
+    y_max_entry = tk.Entry(y_limits_frame, textvariable=y_max_var)
+    y_max_entry.pack(fill="x", padx=5)
+
     # Zeit-Graphen-Optionen
     time_frame = tk.LabelFrame(scrollable_frame, text="Zeit-Graphen")
     time_frame.pack(pady=5, padx=10, fill="x", anchor="center")
@@ -167,7 +192,7 @@ def run_gui():
         svg_options_visible = not svg_options_visible
         svg_options_frame.pack_forget() if not svg_options_visible else svg_options_frame.pack(pady=5, padx=10, fill="x")
 
-    svg_toggle_button = tk.Button(signal_frame, text="Optionen ein/ausblenden", command=toggle_svg_options)
+    svg_toggle_button = tk.Button(signal_frame, text="Filter Optionen", command=toggle_svg_options)
     svg_toggle_button.pack(anchor="w", pady=2, padx=5)
     toggle_svg_options()
     
@@ -393,7 +418,8 @@ def run_gui():
         "show_impulses": show_impulses_var.get(),
         "bar_split": bar_split_var.get(),
         "show_values": show_values_var.get(),
-        "plot_bar": plot_bar_var.get()
+        "plot_bar": plot_bar_var.get(),
+        "y_limits": (y_min_var.get(), y_max_var.get()) if set_y_limits_var.get() else None
     }
 
     filter_settings = {
