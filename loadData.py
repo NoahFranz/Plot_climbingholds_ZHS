@@ -1,3 +1,10 @@
+
+def prepare_time_column(df, autotrim=True):
+    df["Time [s]"] = correct_time_jumps(df["Time [s]"])
+    if autotrim:
+        df["Time [s]"] -= df["Time [s]"].iloc[0]
+    return df
+
 import pandas as pd
 import os
 import glob
@@ -8,54 +15,6 @@ import numpy as np
 import re
 
 
-
-def get_flank_time_range(df, schwellwert=10, offset_sec=4, autotrim=True):
-    """
-    Gibt das globale Zeitintervall zurück, in dem gültige Daten liegen,
-    basierend auf Datenflankenerkennung in allen Fy-Spalten.
-    Berücksichtigt Flanken über alle Spalten hinweg.
-    Wenn autotrim=False, werden der erste und letzte Index des DataFrames verwendet.
-    """
-    if not autotrim:
-        # Wenn autotrim deaktiviert ist, verwende den gesamten Bereich des DataFrames
-        t_start = max(0, df["Time [s]"].iloc[0])
-        t_end = df["Time [s]"].iloc[-1]
-        return (t_start, t_end)
-
-    fy_cols = [col for col in df.columns if "Fy" in col]
-    if not fy_cols:
-        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
-    
-    global_start, global_end = None, None
-
-    for col in fy_cols:
-        diffs = np.abs(df[col].diff())
-        diffs = diffs.rolling(window=5, min_periods=1).mean()
-        # Debug: max diff vs. threshold in get_flank_time_range
-        max_diff = diffs.max()
-        print(f"[get_flank_time_range] Spalte '{col}': max diff = {max_diff:.3f}, schwellwert = {schwellwert}")
-        start_idx = diffs[diffs > schwellwert].first_valid_index()
-        end_idx = diffs[diffs > schwellwert].last_valid_index()
-        
-        if start_idx is not None:
-            curr_start_time = df.loc[start_idx, "Time [s]"]
-            global_start = curr_start_time if global_start is None else min(global_start, curr_start_time)
-            print(f"[get_flank_time_range] Spalte '{col}': global_start = {global_start:.3f}")
-        
-        if end_idx is not None:
-            curr_end_time = df.loc[end_idx, "Time [s]"]
-            global_end = curr_end_time if global_end is None else max(global_end, curr_end_time)
-            print(f"[get_flank_time_range] Spalte '{col}': global_end = {global_end:.3f}")
-
-    # Prüfen, ob keine Flanken gefunden wurden
-    if global_start is None or global_end is None:
-        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
-    
-    # Offset hinzufügen
-    t_start = max(0, global_start - offset_sec)
-    t_end = global_end + offset_sec
-    print("[t_start, t_end] = ", (t_start, t_end))
-    return (t_start, t_end)
 
 def load_lvm_data(folder_path, *, settings):
     """
@@ -103,52 +62,17 @@ Rückgabe:
         df.columns = df.columns.astype(str)
         df = df.apply(pd.to_numeric, errors='coerce')
 
-        df["Time [s]"] = correct_time_jumps(df["Time [s]"])
+        df = prepare_time_column(df, autotrim=autotrim)
         file_name = os.path.splitext(os.path.basename(file_path))[0]
-        kgclimber = None
-        climberforce = None
-        weight_match = re.search(r"_(\d+)kg", file_name)
-        athlete_match = re.search(r"(?<=_)([^_]+)(?=_lvl-)", file_name)
-        # Athlete-Name extrahieren
-        athlete_name = athlete_match.group(1) if athlete_match else "Unbekannt"
-        if athlete_match:
-            print("Athlet:", athlete_name)
-        else:
-            print("Kein Athlet gefunden")
-
-        # Gewicht extrahieren und Kraft berechnen
-        if weight_match:
-            kgclimber = int(weight_match.group(1))
-            climberforce = kgclimber * 9.81
-            print("Gewicht (kg):", kgclimber)
-            print("climberforce:", climberforce)
-        else:
-            kgclimber = 100
-            climberforce = 100
-            print("Kein Gewicht gefunden")
-
-        # Identity Suffix extrahieren
-        # Suche nach dem String am Anfang bis zum Gewichtsteil
-        file_identity = "Unknown"
-        identity_match = re.search(r"^(.+?)_\d+kg", file_name)
-        if identity_match:
-            file_identity = identity_match.group(1)
-        else:
-            print("⚠️ Keine Identity im Dateinamen gefunden:", file_name)
-        print("file_identity:", file_identity)
-
-        if not athlete_match or not weight_match:
-            print("file name is missing relevant information")
-        print("file_name for weight regex:", file_name)
+        metadata = parse_metadata_from_filename(file_name)
+        athlete_name = metadata["athlete"]
+        kgclimber = metadata["weight"]
+        climberforce = kgclimber * 9.81
+        file_identity = metadata["identity"]
         #remove U and "comment" colums
         clean_df = clean_data(df)
         # print(clean_df)
         clean_df = trim_low_force_periods(clean_df, threshold=10, min_duration=3, buffer=2)
-
-        print("autotrim", autotrim)
-        if autotrim:
-            # Zeit startet bei 0
-            clean_df["Time [s]"] = clean_df["Time [s]"] - clean_df["Time [s]"].iloc[0]
 
         g1r = clean_df[["Time [s]"] + [col for col in clean_df.columns if "1" in col]]
         g2l = clean_df[["Time [s]"] + [col for col in clean_df.columns if "2" in col]]
@@ -380,3 +304,65 @@ def correct_time_jumps(time_series, threshold=2.0):
             sprung = dt
             corrected.iloc[i:] = corrected.iloc[i:] - sprung
     return corrected
+
+def parse_metadata_from_filename(file_name):
+    result = {
+        "athlete": "Unbekannt",
+        "weight": 100,
+        "identity": "Unknown"
+    }
+    if match := re.search(r"_(\d+)kg", file_name):
+        result["weight"] = int(match.group(1))
+    if match := re.search(r"(?<=_)([^_]+)(?=_lvl-)", file_name):
+        result["athlete"] = match.group(1)
+    if match := re.search(r"^(.+?)_\d+kg", file_name):
+        result["identity"] = match.group(1)
+    return result
+
+def get_flank_time_range(df, schwellwert=10, offset_sec=4, autotrim=True):
+    """
+    Gibt das globale Zeitintervall zurück, in dem gültige Daten liegen,
+    basierend auf Datenflankenerkennung in allen Fy-Spalten.
+    Berücksichtigt Flanken über alle Spalten hinweg.
+    Wenn autotrim=False, werden der erste und letzte Index des DataFrames verwendet.
+    """
+    if not autotrim:
+        # Wenn autotrim deaktiviert ist, verwende den gesamten Bereich des DataFrames
+        t_start = max(0, df["Time [s]"].iloc[0])
+        t_end = df["Time [s]"].iloc[-1]
+        return (t_start, t_end)
+
+    fy_cols = [col for col in df.columns if "Fy" in col]
+    if not fy_cols:
+        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
+    
+    global_start, global_end = None, None
+
+    for col in fy_cols:
+        diffs = np.abs(df[col].diff())
+        diffs = diffs.rolling(window=5, min_periods=1).mean()
+        # Debug: max diff vs. threshold in get_flank_time_range
+        max_diff = diffs.max()
+        print(f"[get_flank_time_range] Spalte '{col}': max diff = {max_diff:.3f}, schwellwert = {schwellwert}")
+        start_idx = diffs[diffs > schwellwert].first_valid_index()
+        end_idx = diffs[diffs > schwellwert].last_valid_index()
+        
+        if start_idx is not None:
+            curr_start_time = df.loc[start_idx, "Time [s]"]
+            global_start = curr_start_time if global_start is None else min(global_start, curr_start_time)
+            print(f"[get_flank_time_range] Spalte '{col}': global_start = {global_start:.3f}")
+        
+        if end_idx is not None:
+            curr_end_time = df.loc[end_idx, "Time [s]"]
+            global_end = curr_end_time if global_end is None else max(global_end, curr_end_time)
+            print(f"[get_flank_time_range] Spalte '{col}': global_end = {global_end:.3f}")
+
+    # Prüfen, ob keine Flanken gefunden wurden
+    if global_start is None or global_end is None:
+        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
+    
+    # Offset hinzufügen
+    t_start = max(0, global_start - offset_sec)
+    t_end = global_end + offset_sec
+    print("[t_start, t_end] = ", (t_start, t_end))
+    return (t_start, t_end)
