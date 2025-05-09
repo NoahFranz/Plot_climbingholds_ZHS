@@ -286,10 +286,10 @@ def get_force_contact_times(
 
 def compute_impulses(
     df: pd.DataFrame,
-    contact_time: dict,
-    forces: list,
+    contact_time: Dict,
+    forces: List,
     time_col: str = "Time [s]"
-) -> dict:
+) -> Dict:
     """
     Berechnet den Impuls (Integral über Kraft·Zeit) für jede Kraft im gegebenen Intervall.
     
@@ -325,10 +325,10 @@ def compute_impulses(
 
 def compute_impulses_per_contact(
     df: pd.DataFrame,
-    contact_time: list,
+    contact_time: List,
     force: str,
     time_col: str = "Time [s]"
-) -> list:
+) -> List:
     """
     Berechnet den Impuls (Integral über Kraft·Zeit) für jedes Intervall in `contact_time`.
     """
@@ -378,7 +378,7 @@ def print_nested_keys(d, indent=0):
             print_nested_keys(value, indent + 1)
 
 
-def trim_low_force_periods(df, force_cols=["Fy"], threshold=10, min_duration=3.0, buffer=3.0):
+def trim_low_force_periods(df, force_cols: List[str] = ["Fy"], threshold=10, min_duration=3.0, buffer=3.0):
     """
     Entfernt Abschnitte, in denen alle angegebenen Kräfte über längere Zeit unterhalb eines Schwellenwerts liegen.
     Behalte jedoch jeweils einen Puffer von 'buffer' Sekunden davor und danach.
