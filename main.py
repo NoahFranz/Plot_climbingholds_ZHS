@@ -58,9 +58,10 @@ def main():
   #  print("\nall_lvm_data_dict keys:", list(all_lvm_data_dict.keys()))
 
     # compute globale limits for y_limits and save it with every Hold such that every dataframe can access it
+    ylims = plot_settings["y_limits"]
     for filename, file_data in all_lvm_data_dict.items():
         print("\n+++++++++++ new File ++++++++++++++")
-        all_lvm_data_dict[filename] = compute_global_ylimits_for_plots(file_data, forces_g1, forces_g2)
+        all_lvm_data_dict[filename] = compute_global_ylimits_for_plots(file_data, forces_g1, forces_g2, ylims=ylims)
         print_current_dict_summary(current_dict=all_lvm_data_dict)
 
     # Wenn "Plots erstellen" aktiviert ist:

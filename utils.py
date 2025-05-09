@@ -44,7 +44,7 @@ def get_min_max_values_per_column(df):
         for col in df.columns if col != "Time [s]"
     }
 
-def compute_global_ylimits_for_plots(plot_dict, forces_g1, forces_g2, margin=1.2):
+def compute_global_ylimits_for_plots(plot_dict, forces_g1, forces_g2, margin=1.2, ylims=None):
     """
     Berechnet die globalen y-Achsen-Grenzen für beide Griffe (G2L und G1R)
     und fügt diese als 'global_y_limits' zum plot_dict hinzu.
@@ -61,12 +61,13 @@ def compute_global_ylimits_for_plots(plot_dict, forces_g1, forces_g2, margin=1.2
     min_g1 = plot_dict["G1R"]["data"][cols_g1].min().min()
     max_g1 = plot_dict["G1R"]["data"][cols_g1].max().max()
 
-    y_min = min(min_g1, min_g2)
-    y_max = max(max_g1, max_g2)
-
-    # Berechne das globale y_max und y_min (mit Sicherheitsmarge)
-    global_y_max = y_max
-    global_y_min = y_min
+    if ylims is not None:
+        global_y_min, global_y_max = ylims
+    else:
+        y_min = min(min_g1, min_g2)
+        y_max = max(max_g1, max_g2)
+        global_y_min = y_min
+        global_y_max = y_max
 
     # Speichern der globalen Limits in global_y_limits
     global_y_limits["global_y_min"] = global_y_min

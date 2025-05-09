@@ -247,6 +247,8 @@ def plot_data_per_hold(
             y_min_left = plot_dict["G1R"]["global_y_limits"]["global_y_min"]*1.2
             y_max_left = plot_dict["G1R"]["global_y_limits"]["global_y_max"]*1.2
             ax_left.set_ylim([y_min_left, y_max_left])
+            
+            
             # Optional: Momente auf Sekundärachse anzeigen
             mz_cols = [col for col in plot_dict["G2L"]["data"].columns if "Mz" in col]
             sec_ax_left = None
@@ -304,12 +306,16 @@ def plot_data_per_hold(
                 ax_right = axes[1]
                 time_right = plot_dict["G1R"]["data"]["Time [s]"]
                 plot_normal_forces(ax_right, plot_dict["G1R"]["data"], forces_g1, color_mapping)
+
                 ax_right.set_title("GR")
                 ax_right.set_xlabel("Time [s]")
 
                 # Nach Plotten der Normalkräfte: lokale y-Limits berechnen
                 data_right = plot_dict["G1R"]["data"][[col for col in plot_dict["G1R"]["data"].columns if any(f in col for f in forces_g1)]]
                 y_min_right, y_max_right = compute_ylimits(data_right, margin=margin)
+                y_min_right = plot_dict["G1R"]["global_y_limits"]["global_y_min"]*1.2
+                y_max_right = plot_dict["G1R"]["global_y_limits"]["global_y_max"]*1.2
+
                 ax_right.set_ylim([y_min_right, y_max_right])
                 # Falls Mz aktiv ist, plotte zusätzlich Mz auf einer Sekundärachse
                 mz_cols = [col for col in plot_dict["G1R"]["data"].columns if "Mz" in col]
@@ -320,6 +326,7 @@ def plot_data_per_hold(
                     mz_df_right = plot_dict["G1R"]["data"][mz_cols]
                     y_min_mz_right, y_max_mz_right = compute_ylimits(mz_df_right, margin=margin)
                     sec_ax_right.set_ylim([y_min_mz_right, y_max_mz_right])
+                
                 # Optional: Kontaktzeiten als halbtransparente Flächen markieren
                 if show_contact_time:
                     contact_time = plot_dict["G1R"].get("contact_time", {})
