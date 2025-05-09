@@ -131,34 +131,19 @@ Rückgabe:
         # save file identity suffix in dict
         data_dict[file_name]["file_identity"] = file_identity
 
-        # Falls gewünscht: Normiere alle Kräfte (Fy, Fz, Fx) auf das Kletterergewicht (climberforce)
-        if normalizeByweight:
-            if climberforce is not None and isinstance(climberforce, (int, float)):
-                for side in ["G1R", "G2L"]:
-                    df = data_dict[file_name][side]["data"]
-                    for force_type in ["Fy", "Fz", "Fx", "Mz"]:
-                        force_cols = [col for col in df.columns if force_type in col]
-                        for col in force_cols:
-                            df[col] = df[col] / climberforce
-                            df[col] = df[col] * 100
-            else:
-                print(f"⚠️ Kein gültiges Gewicht für Datei '{file_name}', Normierung wird übersprungen.")
-
-        # calc_FgR(data_dict)
+        # Gemeinsamer Schleifendurchlauf für Normierung und Fres/φ_yz-Berechnung
         for side in ["G1R", "G2L"]:
             df = data_dict[file_name][side]["data"]
-            fy_cols = [col for col in df.columns if "Fy" in col]
-            fz_cols = [col for col in df.columns if "Fz" in col]
 
-            if fy_cols and fz_cols:
-                fy = df[fy_cols[0]]
-                fz = df[fz_cols[0]]
-                fres = np.sqrt(fy**2 + fz**2)
-                angle = np.rad2deg(np.arctan2(fz, fy))  # Winkel in Grad
-                phiyz = angle - 40  # Bezug zur Senkrechten (Wandwinkel)
+            # Normierung auf Körpergewicht
+            if normalizeByweight and climberforce is not None and isinstance(climberforce, (int, float)):
+                for force_type in ["Fy", "Fz", "Fx", "Mz"]:
+                    force_cols = [col for col in df.columns if force_type in col]
+                    for col in force_cols:
+                        df[col] = df[col] / climberforce * 100
 
-                df.loc[:, "Fres"] = fres
-                df.loc[:, "φ_yz"] = phiyz
+        # Berechne Fres und φ_yz für beide Seiten
+        calc_resultant_fy_fz(data_dict)
 
     # Berechne und speichere die Aktivitäts-Kontaktzeiten für jede Kraft pro Griff
     force_keys = ["Fy", "Fx", "Fz", "Mz"]
