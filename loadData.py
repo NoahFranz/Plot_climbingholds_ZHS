@@ -1,38 +1,9 @@
-def export_impulse_data(file_data, fname, folder_path):
-    date_match = re.search(r"(\d{2})-(\d{2})-(\d{2})", fname)
-    if date_match:
-        yy, mm, dd = date_match.groups()
-        date_str = f"{dd}_{mm}_{yy}_impulses"
-    else:
-        date_str = "unknown_date_impulses"
-    impulse_dir = os.path.join(folder_path, date_str)
-    os.makedirs(impulse_dir, exist_ok=True)
-    txt_path = os.path.join(impulse_dir, f"{fname}_impulses.txt")
-    try:
-        with open(txt_path, "w") as f:
-            f.write(f"Impulsdaten für Datei '{fname}'\n")
-            for side in ["G1R", "G2L"]:
-                f.write(f"\n{side}:\n")
-                contact_times_side = file_data[side].get("contact_time", {})
-                for force_name, ctimes in contact_times_side.items():
-                    if ctimes:
-                        ctimes_str = ", ".join(f"({t0:.2f}-{t1:.2f}s)" for t0, t1 in ctimes)
-                    else:
-                        ctimes_str = "keine Kontaktzeiten"
-                    f.write(f"  {force_name} Kontaktzeiten: {ctimes_str}\n")
-                    impulses_side = file_data[side]["impulses"].get(force_name, {})
-                    for comp, vals in impulses_side.items():
-                        vals_str = ", ".join(f"{v:.1f}" for v in vals)
-                        f.write(f"    {comp}: [{vals_str}]\n")
-        print(f"Impulsdaten gespeichert in: {txt_path}")
-    except Exception as e:
-        print(f"Fehler beim Schreiben der Impulsdatei '{txt_path}': {e}")
-
-def prepare_time_column(df, autotrim=True):
-    df["Time [s]"] = correct_time_jumps(df["Time [s]"])
-    if autotrim:
-        df["Time [s]"] -= df["Time [s]"].iloc[0]
-    return df
+def compute_contact_times(file_data: dict, force_keys: list[str]) -> None:
+    for side in ["G1R", "G2L"]:
+        contact_times = get_force_contact_times(file_data[side]["data"], force_keys)
+        file_data[side]["contact_time"] = contact_times
+        stats = compute_contact_time_stats_per_force(contact_times)
+        file_data[side]["contact_time_stats"] = stats
 
 import pandas as pd
 import os
@@ -45,12 +16,22 @@ import re
 
 
 
+def compute_impulses(file_data: dict, force_keys: list[str]) -> None:
+    for side in ["G1R", "G2L"]:
+        impulses = {}
+        for force in force_keys:
+            ctimes = file_data[side]["contact_time"].get(force, [])
+            impulses[force] = compute_impulses_per_contact(
+                file_data[side]["data"], ctimes, force
+            )
+        file_data[side]["impulses"] = impulses
+
 def split_grip_sides(df):
     g1r = df[["Time [s]"] + [col for col in df.columns if "1" in col]]
     g2l = df[["Time [s]"] + [col for col in df.columns if "2" in col]]
     return g1r, g2l
 
-def load_lvm_data(folder_path, *, settings):
+def load_lvm_data(folder_path, *, settings) -> dict[str, dict]:
     """
 Lädt .lvm-Dateien aus dem angegebenen Verzeichnis und bereitet sie für die spätere Analyse auf.
 
@@ -164,57 +145,26 @@ Rückgabe:
                 print(f"⚠️ Kein gültiges Gewicht für Datei '{file_name}', Normierung wird übersprungen.")
 
         # calc_FgR(data_dict)
-        calc_resultant_fy_fz(data_dict)
+        for side in ["G1R", "G2L"]:
+            df = data_dict[file_name][side]["data"]
+            fy_cols = [col for col in df.columns if "Fy" in col]
+            fz_cols = [col for col in df.columns if "Fz" in col]
+
+            if fy_cols and fz_cols:
+                fy = df[fy_cols[0]]
+                fz = df[fz_cols[0]]
+                fres = np.sqrt(fy**2 + fz**2)
+                angle = np.rad2deg(np.arctan2(fz, fy))  # Winkel in Grad
+                phiyz = angle - 40  # Bezug zur Senkrechten (Wandwinkel)
+
+                df.loc[:, "Fres"] = fres
+                df.loc[:, "φ_yz"] = phiyz
 
     # Berechne und speichere die Aktivitäts-Kontaktzeiten für jede Kraft pro Griff
     force_keys = ["Fy", "Fx", "Fz", "Mz"]
     for fname, file_data in data_dict.items():
-        contact_times_g1 = get_force_contact_times(file_data["G1R"]["data"], force_keys)
-      #  print(f"[Kontaktzeiten] Datei '{fname}' G1R:")
-        for force, ctimes in contact_times_g1.items():
-            if not ctimes:
-                print(f"  {force}: keine Kontaktzeiten gefunden")
-            else:
-                continue
-                for idx, (t0, t1) in enumerate(ctimes):
-                    
-                    print(f"  {force} [{idx}]: Start = {t0:.2f}s, Ende = {t1:.2f}s")
-        file_data["G1R"]["contact_time"] = contact_times_g1
-        stats_g1 = compute_contact_time_stats_per_force(contact_times_g1)
-        file_data["G1R"]["contact_time_stats"] = stats_g1
-
-        contact_times_g2 = get_force_contact_times(file_data["G2L"]["data"], force_keys)
-     #   print(f"[Kontaktzeiten] Datei '{fname}' G2L:")
-        for force, ctimes in contact_times_g2.items():
-            if not ctimes:
-                print(f"  {force}: keine Kontaktzeiten gefunden")
-            else:
-                for idx, (t0, t1) in enumerate(ctimes):
-                   # print(f"  {force} [{idx}]: Start = {t0:.2f}s, Ende = {t1:.2f}s")
-                   continue
-        file_data["G2L"]["contact_time"] = contact_times_g2
-        stats_g2 = compute_contact_time_stats_per_force(contact_times_g2)
-        file_data["G2L"]["contact_time_stats"] = stats_g2
-
-        # Impuls-Berechnung pro Griff für jede erkannte Kontaktzeit
-        # G1R: compute impulses per contact_time per force
-        impulses_dict_g1 = {}
-        for force in force_keys:
-            ctimes = contact_times_g1.get(force, [])
-            impulses_dict_g1[force] = compute_impulses_per_contact(
-                file_data["G1R"]["data"], ctimes, force
-            )
-        file_data["G1R"]["impulses"] = impulses_dict_g1
-
-        # G2L: compute impulses per contact_time per force
-        impulses_dict_g2 = {}
-        for force in force_keys:
-            ctimes = contact_times_g2.get(force, [])
-            impulses_dict_g2[force] = compute_impulses_per_contact(
-                file_data["G2L"]["data"], ctimes, force
-            )
-        file_data["G2L"]["impulses"] = impulses_dict_g2
-
+        compute_contact_times(file_data, force_keys)
+        compute_impulses(file_data, force_keys)
         if save_plot:
             export_impulse_data(file_data, fname, folder_path)
 
@@ -368,3 +318,39 @@ def get_flank_time_range(df, schwellwert=10, offset_sec=4, autotrim=True):
     t_end = global_end + offset_sec
     print("[t_start, t_end] = ", (t_start, t_end))
     return (t_start, t_end)
+
+def export_impulse_data(file_data, fname, folder_path):
+    date_match = re.search(r"(\d{2})-(\d{2})-(\d{2})", fname)
+    if date_match:
+        yy, mm, dd = date_match.groups()
+        date_str = f"{dd}_{mm}_{yy}_impulses"
+    else:
+        date_str = "unknown_date_impulses"
+    impulse_dir = os.path.join(folder_path, date_str)
+    os.makedirs(impulse_dir, exist_ok=True)
+    txt_path = os.path.join(impulse_dir, f"{fname}_impulses.txt")
+    try:
+        with open(txt_path, "w") as f:
+            f.write(f"Impulsdaten für Datei '{fname}'\n")
+            for side in ["G1R", "G2L"]:
+                f.write(f"\n{side}:\n")
+                contact_times_side = file_data[side].get("contact_time", {})
+                for force_name, ctimes in contact_times_side.items():
+                    if ctimes:
+                        ctimes_str = ", ".join(f"({t0:.2f}-{t1:.2f}s)" for t0, t1 in ctimes)
+                    else:
+                        ctimes_str = "keine Kontaktzeiten"
+                    f.write(f"  {force_name} Kontaktzeiten: {ctimes_str}\n")
+                    impulses_side = file_data[side]["impulses"].get(force_name, {})
+                    for comp, vals in impulses_side.items():
+                        vals_str = ", ".join(f"{v:.1f}" for v in vals)
+                        f.write(f"    {comp}: [{vals_str}]\n")
+        print(f"Impulsdaten gespeichert in: {txt_path}")
+    except Exception as e:
+        print(f"Fehler beim Schreiben der Impulsdatei '{txt_path}': {e}")
+
+def prepare_time_column(df, autotrim=True):
+    df["Time [s]"] = correct_time_jumps(df["Time [s]"])
+    if autotrim:
+        df["Time [s]"] -= df["Time [s]"].iloc[0]
+    return df
