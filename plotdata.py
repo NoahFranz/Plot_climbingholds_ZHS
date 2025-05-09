@@ -6,6 +6,8 @@ from matplotlib.colors import to_rgb
 from typing import List, Dict, Any, Optional, Tuple, Union
 import numpy as np
 import os  # für Dateisystemoperationen
+from utils import print_nested_keys
+
 
 # plotdata.py: Sammlung von Funktionen zum Erstellen von Diagrammen für Kraft- und Impulsdaten
 # Diese Datei enthält:
@@ -61,9 +63,9 @@ def _plot_force_lines(ax: plt.Axes, df: pd.DataFrame, forces: List[str],
                     color=color_map.get(force, "black"), alpha=alpha)
 
 COLOR_MAPPING = {
-    "Fy": "blue",
+    "Fy": "orange",
     "Fx": "green",
-    "Fz": "orange",
+    "Fz": "blue",
     "Mz": "#8B1A1A",  # Kaminrot
     "FgR": "#9ACD32",
     "FgR_calc": "#32CD32",
@@ -122,6 +124,7 @@ def plot_single_hold_splitview(
         # Erstelle eine Figure mit 2 Zeilen und 1 Spalte; 
         # die Breite ist fix (6.3 Zoll, passend für LaTeX) und Höhe auf 8 Zoll gewählt.
         fig, (ax_top, ax_bottom) = plt.subplots(2, 1, figsize=PLOT_CONFIG["default_figsize"], sharex=True)
+        fig.suptitle(filename, fontsize=12)
         
         # Untere bzw. obere Achsen einrichten und Daten plotten
         for col in normal_cols:
@@ -169,7 +172,7 @@ def plot_data_per_hold(
     save_folder: str = ".",
     cutoff: Optional[Dict[str, float]] = None,
     normalizebyweight: bool = False,
-    show_contact_time: bool = False
+    show_contact_time: bool = False,
 ) -> None:
     """
     Erstellt eine Figure mit separaten Subplots für den linken (G2L) und rechten Griff (G1R).
@@ -199,7 +202,10 @@ def plot_data_per_hold(
         cutoff : dict or None
             Dictionary mit "start" und "end" in Sekunden für die Trimmung.
     """
-    print("executing: plo_data_per_hold")
+    print("     executing: plo_data_per_hold")
+    print("     current file_dict:")
+   # print_nested_keys(plot_dict, 1)
+    
     try:
         figstyle = "2G"
         grip_label = "OL_UR"
@@ -218,6 +224,9 @@ def plot_data_per_hold(
         fig_height = 4 * num_axes
         fig, axes = plt.subplots(num_axes, 1, figsize=(6.3, fig_height), sharex=True)
         axes = [axes] if num_axes == 1 else axes
+        # === Einfügen des Dateinamens/Identität als Suptitle ===
+        file_identity = plot_dict.get("file_identity", filename)
+        fig.suptitle(file_identity, fontsize=12)
 
         # --- Plot für linken Griff (G2L) ---
         if only_mz_g2:
@@ -235,7 +244,8 @@ def plot_data_per_hold(
             ax_left.set_title("GL")
             # Normalkräfte plotten und y-Grenzen berechnen
             data_left = plot_dict["G2L"]["data"][[col for col in plot_dict["G2L"]["data"].columns if any(f in col for f in forces_g2)]]
-            y_min_left, y_max_left = compute_ylimits(data_left, margin=margin)
+            y_min_left = plot_dict["G1R"]["global_y_limits"]["global_y_min"]*1.2
+            y_max_left = plot_dict["G1R"]["global_y_limits"]["global_y_max"]*1.2
             ax_left.set_ylim([y_min_left, y_max_left])
             # Optional: Momente auf Sekundärachse anzeigen
             mz_cols = [col for col in plot_dict["G2L"]["data"].columns if "Mz" in col]
@@ -246,8 +256,10 @@ def plot_data_per_hold(
                 mz_df_left = plot_dict["G2L"]["data"][mz_cols]
                 y_min_mz_left, y_max_mz_left = compute_ylimits(mz_df_left, margin=margin)
                 sec_ax_left.set_ylim([y_min_mz_left, y_max_mz_left])
-            # Optional: Kontaktzeiten als halbtransparente Flächen markieren
+           
+            # Optional: Kontaktzeiten als halbtransparente Flächen markieren und alle Impulse pro Intervall anzeigen
             if show_contact_time:
+                # Kontaktzeiten als halbtransparente Flächen markieren
                 contact_time = plot_dict["G2L"].get("contact_time", {})
                 for force in forces_g2:
                     ivals = contact_time.get(force, [])
@@ -255,6 +267,27 @@ def plot_data_per_hold(
                         ax_left.axvspan(t0, t1,
                                         color=get_color_for(force, "G2L"),
                                         alpha=0.15)
+
+                # Alle Impulse pro Intervall anzeigen
+                impulses_dict = plot_dict["G2L"].get("impulses", {})
+                contact_time = plot_dict["G2L"].get("contact_time", {})
+                for force in forces_g2:
+                    imp_list = impulses_dict.get(force, [])
+                    ivals = contact_time.get(force, [])
+                    for (imp, (t0, t1)) in zip(imp_list, ivals):
+                        try:
+                            imp_val = float(imp)
+                            if abs(imp_val) > 0 and t1 > t0:
+                                # Place label at right end of interval, 3/4 up the y-axis
+                                x_pos = t1+0.5
+                                ylims = ax_left.get_ylim()
+                                y_pos = ylims[0] + 0.75 * (ylims[1] - ylims[0])
+                                ct = t1 - t0
+                                txt = f"{imp_val:.1f}\n({ct:.2f}s)"
+                                ax_left.text(x_pos, y_pos, txt, color="grey", ha="left", va="center", fontsize=6)
+                        except Exception as e:
+                            logger.warning(f"Fehler beim Anzeigen von Impuls {force} für G2L: {e}")
+
             # Zusammenführen von Primär- und Sekundär-Legenden
             combine_legends(ax_left, sec_ax_left, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
         
@@ -273,6 +306,7 @@ def plot_data_per_hold(
                 plot_normal_forces(ax_right, plot_dict["G1R"]["data"], forces_g1, color_mapping)
                 ax_right.set_title("GR")
                 ax_right.set_xlabel("Time [s]")
+
                 # Nach Plotten der Normalkräfte: lokale y-Limits berechnen
                 data_right = plot_dict["G1R"]["data"][[col for col in plot_dict["G1R"]["data"].columns if any(f in col for f in forces_g1)]]
                 y_min_right, y_max_right = compute_ylimits(data_right, margin=margin)
@@ -295,8 +329,28 @@ def plot_data_per_hold(
                             ax_right.axvspan(t0, t1,
                                              color=get_color_for(force, "G1R"),
                                              alpha=0.15)
+                
+                
+                # Alle Impulse pro Intervall anzeigen
+                impulses_dict = plot_dict["G1R"].get("impulses", {})
+                contact_time = plot_dict["G1R"].get("contact_time", {})
+                for force in forces_g1:
+                    imp_list = impulses_dict.get(force, [])
+                    ivals = contact_time.get(force, [])
+                    for (imp, (t0, t1)) in zip(imp_list, ivals):
+                        try:
+                            imp_val = float(imp)
+                            if abs(imp_val) > 0 and t1 > t0:
+                                # Place label at right end of interval, 3/4 up the y-axis
+                                x_pos = t1+0.5
+                                ylims = ax_right.get_ylim()
+                                y_pos = ylims[0] + 0.75 * (ylims[1] - ylims[0])
+                                ct = t1 - t0
+                                txt = f"{imp_val:.1f}\n({ct:.2f}s)"
+                                ax_right.text(x_pos, y_pos, txt, color="grey", ha="left", va="center", fontsize=6)
+                        except Exception as e:
+                            logger.warning(f"Fehler beim Anzeigen von Impuls {force} für G1R: {e}")
                 combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
-        
         # Zeitbereich mit kleinem Puffer setzen, damit Linien nicht abgeschnitten werden
         time_min = min(time_left.min(), time_right.min()) if has_g1 else time_left.min()
         time_max = max(time_left.max(), time_right.max()) if has_g1 else time_left.max()
@@ -306,6 +360,7 @@ def plot_data_per_hold(
             axes[1].set_xlim([time_min - 0.01 * time_range, time_max + 0.05 * time_range])
         
         plt.tight_layout()
+
         # Aufräumen und Standard-Stil erneut anwenden
         apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
         if save_plot:
@@ -344,6 +399,8 @@ def plot_selected_forces_comparison(
             if f not in allForcesList:
                 allForcesList.append(f)
         fig, axes = plt.subplots(2, 1, figsize=PLOT_CONFIG["default_figsize"])
+        file_identity = file_dict.get("file_identity", filename)
+        fig.suptitle(file_identity, fontsize=12)
         axes_list = list(axes)
         logger.debug(f"allForcesList in plot_selected_forces_comparison: {allForcesList}")
         for idx, current_force in enumerate(allForcesList[:2]):
@@ -416,7 +473,7 @@ def plot_selected_forces_comparison(
 # ======================================================
 def plot_impulses_bar(
     all_lvm_data_dict,
-    force: str = "",  # Oder "Fy" etc.
+    forces: List[str] = [],
     split_grips: bool = False,  # True: oben/unten, False: gruppiert nebeneinander
     show_values: bool = True,
     figsize: Tuple[int, int] = (8, 5),
@@ -431,118 +488,107 @@ def plot_impulses_bar(
     """
     # Initialisiere Listen für Athletennamen, Impulswerte und Kontaktzeiten
     print("\n +++++++++ in plot_impulse_bar ++++++++++")
-    print("     force: ", force)
+    print("     forces: ", forces)
+    print_nested_keys(all_lvm_data_dict,1)
 
     # variable init
     optional_suffix += "_BAR"
-    athlete_names = []
-    g1r_impulses, g2l_impulses = [], []
-    contact_times_g1 = []
-    contact_times_g2 = []
     y_titel = " [%s]"
     MARGIN = 1.1
     margin = MARGIN
     if not normalizebyweight:
         y_titel = " [Ns]"
 
-    # extract direction 
-    direction = map_force_to_axis(force=force)  #z,y,x,mz
+    for force in forces:
+        direction = map_force_to_axis(force=force)
+        athlete_names = []
+        g1r_impulses, g2l_impulses = [], []
+        contact_times_g1 = []
+        contact_times_g2 = []
 
-    # loop over data
-    for fname, dct in all_lvm_data_dict.items():
-        # Aus Dictionary für jede Datei Impuls- und Kontaktzeit-Listen holen
-        curr_ath_name = all_lvm_data_dict[fname]["athletename"]
+        # loop over data
+        for fname, dct in all_lvm_data_dict.items():
+            curr_identity = dct.get("file_identity", "Unknown")
 
-        # Impuls listen
-        g1_imp_list = dct.get("G1R", {}).get("impulses", {}).get(force, [])[force]
-        g2_imp_list = dct.get("G2L", {}).get("impulses", {}).get(force, [])[force]
+            # impulsdaten
+            g1_imp_list = dct.get("G1R", {}).get("impulses", {}).get(force, [])
+            g2_imp_list = dct.get("G2L", {}).get("impulses", {}).get(force, [])
 
-        # Kontaktzeiten als Liste von (start, end)
-        g1_intervals = dct.get("G1R", {}).get("contact_time", {}).get(force, [])
-        g2_intervals = dct.get("G2L", {}).get("contact_time", {}).get(force, [])
+            # contact time
+            g1_intervals = dct.get("G1R", {}).get("contact_time", {}).get(force, [])
+            g2_intervals = dct.get("G2L", {}).get("contact_time", {}).get(force, [])
+            g1_imp = max(g1_imp_list, key=abs) if g1_imp_list else 0
+            g2_imp = max(g2_imp_list, key=abs) if g2_imp_list else 0
+            g1_ct = find_max_impulse_interval_length(g1_imp_list, g1_intervals)
+            g2_ct = find_max_impulse_interval_length(g2_imp_list, g2_intervals)
+            if g1_imp != 0 and g1_ct > 0:
+                g1r_impulses.append(g1_imp)
+                contact_times_g1.append(g1_ct)
+            if g2_imp != 0 and g2_ct > 0:
+                g2l_impulses.append(g2_imp)
+                contact_times_g2.append(g2_ct)
+            athlete_names.append(f"{curr_identity} – {force}")
 
-        # Nimm den größten Impuls pro Griff (Betrag)..
-        g1_imp = max(g1_imp_list, key = abs) if g1_imp_list else 0
-        g2_imp = max(g2_imp_list, key = abs) if g2_imp_list else 0
+        # plot options : splitview / all in one    
+        if split_grips:
+            optional_suffix += "_split"
+            filtered_names_g1 = []
+            filtered_g1 = []
+            filtered_ct1 = []
+            for name, g1, ct1 in zip(athlete_names, g1r_impulses, contact_times_g1):
+                if g1 != 0 and ct1 and ct1 > 0:
+                    filtered_names_g1.append(name)
+                    filtered_g1.append(g1)
+                    filtered_ct1.append(ct1)
 
-        # ..und berechne zugehörige Kontaktzeit
-        g1_ct = find_max_impulse_interval_length(g1_imp_list, g1_intervals)
-        g2_ct = find_max_impulse_interval_length(g2_imp_list, g2_intervals)
+            filtered_names_g2 = []
+            filtered_g2 = []
+            filtered_ct2 = []
+            for name, g2, ct2 in zip(athlete_names, g2l_impulses, contact_times_g2):
+                if g2 != 0 and ct2 and ct2 > 0:
+                    filtered_names_g2.append(name)
+                    filtered_g2.append(g2)
+                    filtered_ct2.append(ct2)
 
-        # Name und relevant impulses for plotting
-        athlete_names.append(curr_ath_name)
+            indices_g1 = np.arange(len(filtered_names_g1))
+            indices_g2 = np.arange(len(filtered_names_g2))
 
-        # Nur intervalle mit Impuls / Dauer >0 anhängen und damit plotten
-        if g1_imp != 0 and g1_ct > 0:
-            g1r_impulses.append(g1_imp)
-            contact_times_g1.append(g1_ct)
-        if g2_imp != 0:
-            g2l_impulses.append(g2_imp)
-            contact_times_g2.append(g2_ct)
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
+            _plot_impulses_bar_split(ax1, ax2, indices_g1, filtered_names_g1, filtered_g1, filtered_ct1,
+                                     indices_g2, filtered_names_g2, filtered_g2, filtered_ct2,
+                                     force, title, direction, y_titel, margin, show_values)
+        else:
+            optional_suffix += "_combined"
+            filtered_names = []
+            filtered_g1 = []
+            filtered_g2 = []
+            filtered_ct1 = []
+            filtered_ct2 = []
+            for name, g1, g2, ct1, ct2 in zip(athlete_names, g1r_impulses, g2l_impulses, contact_times_g1, contact_times_g2):
+                if (g1 != 0 and ct1 and ct1 > 0) or (g2 != 0 and ct2 and ct2 > 0):
+                    filtered_names.append(name)
+                    filtered_g1.append(g1 if g1 != 0 and ct1 and ct1 > 0 else 0)
+                    filtered_g2.append(g2 if g2 != 0 and ct2 and ct2 > 0 else 0)
+                    filtered_ct1.append(ct1 if g1 != 0 and ct1 and ct1 > 0 else None)
+                    filtered_ct2.append(ct2 if g2 != 0 and ct2 and ct2 > 0 else None)
+            indices = np.arange(len(filtered_names))
+            fig, ax = plt.subplots(figsize=figsize)
+            _plot_impulses_bar_combined(ax, indices, filtered_names, filtered_g1, filtered_g2, filtered_ct1,
+                                        filtered_ct2, force, title, direction, y_titel, margin, show_values)
 
-    # plot options : splitview / all in one    
-    if split_grips:
-        optional_suffix += "_split"
-        # Synchrone Filterung für beide Griffe
-        filtered_names_g1 = []
-        filtered_g1 = []
-        filtered_ct1 = []
-        for name, g1, ct1 in zip(athlete_names, g1r_impulses, contact_times_g1):
-            if g1 != 0 and ct1 and ct1 > 0:
-                filtered_names_g1.append(name)
-                filtered_g1.append(g1)
-                filtered_ct1.append(ct1)
+        plt.tight_layout()
 
-        filtered_names_g2 = []
-        filtered_g2 = []
-        filtered_ct2 = []
-        for name, g2, ct2 in zip(athlete_names, g2l_impulses, contact_times_g2):
-            if g2 != 0 and ct2 and ct2 > 0:
-                filtered_names_g2.append(name)
-                filtered_g2.append(g2)
-                filtered_ct2.append(ct2)
-
-        indices_g1 = np.arange(len(filtered_names_g1))
-        indices_g2 = np.arange(len(filtered_names_g2))
-
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=figsize, sharex=True)
-        _plot_impulses_bar_split(ax1, ax2, indices_g1, filtered_names_g1, filtered_g1, filtered_ct1,
-                                 indices_g2, filtered_names_g2, filtered_g2, filtered_ct2,
-                                 force, title, direction, y_titel, margin, show_values)
-    else:
-        optional_suffix += "_combined"
-        # Filtere Athleten, bei denen mindestens ein gültiger Impuls/Kontaktzeit vorhanden ist
-        filtered_names = []
-        filtered_g1 = []
-        filtered_g2 = []
-        filtered_ct1 = []
-        filtered_ct2 = []
-        for name, g1, g2, ct1, ct2 in zip(athlete_names, g1r_impulses, g2l_impulses, contact_times_g1, contact_times_g2):
-            if (g1 != 0 and ct1 and ct1 > 0) or (g2 != 0 and ct2 and ct2 > 0):
-                filtered_names.append(name)
-                filtered_g1.append(g1 if g1 != 0 and ct1 and ct1 > 0 else 0)
-                filtered_g2.append(g2 if g2 != 0 and ct2 and ct2 > 0 else 0)
-                filtered_ct1.append(ct1 if g1 != 0 and ct1 and ct1 > 0 else None)
-                filtered_ct2.append(ct2 if g2 != 0 and ct2 and ct2 > 0 else None)
-        indices = np.arange(len(filtered_names))
-        fig, ax = plt.subplots(figsize=figsize)
-        _plot_impulses_bar_combined(ax, indices, filtered_names, filtered_g1, filtered_g2, filtered_ct1,
-                                    filtered_ct2, force, title, direction, y_titel, margin, show_values)
-
-    # Gemeinsame Nachbearbeitung für beide Plot-Arten
-    plt.tight_layout()
-
-    if split_grips:
-        for axis in (ax1, ax2):
-            apply_barplot_style(axis, margin=MARGIN)
-    else:
-        apply_barplot_style(ax, margin=MARGIN)
-    if save_plot:
-        filename = f"{title}{optional_suffix}.png"
-        file_path = os.path.join(save_folder, filename)
-        print(f"saving impulses bar plot to: {file_path}")
-        fig.savefig(file_path)
-    plt.show()
+        if split_grips:
+            for axis in (ax1, ax2):
+                apply_barplot_style(axis, margin=MARGIN)
+        else:
+            apply_barplot_style(ax, margin=MARGIN)
+        if save_plot:
+            filename = f"{title}{optional_suffix}.png"
+            file_path = os.path.join(save_folder, filename)
+            print(f"saving impulses bar plot to: {file_path}")
+            fig.savefig(file_path)
+        plt.show()
 
 
 # === Helper functions for plot_impulses_bar ===
@@ -553,17 +599,18 @@ def _plot_impulses_bar_split(ax1, ax2, indices_g1, filtered_names_g1, filtered_g
     bar_colors_g1 = ["deepskyblue"] * len(filtered_g1)
     bar_colors_g2 = ["coral"] * len(filtered_g2)
 
-    bars1 = ax1.bar(indices_g1, filtered_g1, color=bar_colors_g1, label="GR")
-    bars2 = ax2.bar(indices_g2, filtered_g2, color=bar_colors_g2, label="GL")
 
+    bars1 = ax1.bar(indices_g2, filtered_g2, color=bar_colors_g2, label="GL")
+    bars2 = ax2.bar(indices_g1, filtered_g1, color=bar_colors_g1, label="GR")
+    
     # Achsenbeschriftungen
-    ax1.set_title(f"{title} – {force} – GR")
-    ax2.set_title(f"{title} – {force} – GL")
+    ax1.set_title(f"{title} – {force} – GL")
+    ax2.set_title(f"{title} – {force} – GR")
     ax2.set_ylabel(f"Impuls P{direction} {y_title}")
-    ax1.set_xticks(indices_g1)
-    ax1.set_xticklabels(filtered_names_g1, rotation=25, ha="right")
-    ax2.set_xticks(indices_g2)
-    ax2.set_xticklabels(filtered_names_g2, rotation=25, ha="right")
+    ax1.set_xticks(indices_g2)
+    ax1.set_xticklabels(filtered_names_g2, rotation=25, ha="right")
+    ax2.set_xticks(indices_g1)
+    ax2.set_xticklabels(filtered_names_g1, rotation=25, ha="right")
 
     # Gemeinsame y-Limits für beide Achsen setzen (auf Maximalbereich beider)
     min_g1 = min(filtered_g1) if filtered_g1 else 0
@@ -588,10 +635,10 @@ def _plot_impulses_bar_split(ax1, ax2, indices_g1, filtered_names_g1, filtered_g
         fontsize = 6
         for bar, ct, g1 in zip(bars1, filtered_ct1, filtered_g1):
             txt = f"{g1:.1f}\n({ct:.1f}s)"
-            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt, ha="center", va="bottom", fontsize=fontsize, color="grey")
+            ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt, ha="center", va="bottom", fontsize=fontsize, color="grey")
         for bar, ct, g2 in zip(bars2, filtered_ct2, filtered_g2):
             txt = f"{g2:.1f}\n({ct:.1f}s)"
-            ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt, ha="center", va="bottom", fontsize=fontsize, color="grey")
+            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt, ha="center", va="bottom", fontsize=fontsize, color="grey")
 
 
 def _plot_impulses_bar_combined(ax, indices, filtered_names, filtered_g1, filtered_g2, filtered_ct1,
@@ -613,6 +660,7 @@ def _plot_impulses_bar_combined(ax, indices, filtered_names, filtered_g1, filter
             bar_colors_g1.append("grey")
         else:
             bar_colors_g1.append("deepskyblue")
+            
     bars2 = ax.bar(indices - width/2, filtered_g2, width, color=bar_colors_g2, label="GL")
     bars1 = ax.bar(indices + width/2, filtered_g1, width, color=bar_colors_g1, label="GR")
     ax.set_xticks(indices)
