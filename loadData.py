@@ -57,7 +57,7 @@ def get_flank_time_range(df, schwellwert=10, offset_sec=4, autotrim=True):
     print("[t_start, t_end] = ", (t_start, t_end))
     return (t_start, t_end)
 
-def load_lvm_data(folder_path, SVGwindowlength, SVGpolyorder, usefilter, normalizeByweight=False, save_plot= bool):
+def load_lvm_data(folder_path, *, settings):
     """
 Lädt .lvm-Dateien aus dem angegebenen Verzeichnis und bereitet sie für die spätere Analyse auf.
 
@@ -88,6 +88,13 @@ Zusätzlich werden folgende Spalten ergänzt:
 Rückgabe:
   dict[str, dict[str, dict[str, Any]]]
 """
+    SVGwindowlength = settings.get("SVGwindowlength")
+    SVGpolyorder = settings.get("SVGpolyorder")
+    usefilter = settings.get("usefilter", False)
+    normalizeByweight = settings.get("normalizeByweight", False)
+    save_plot = settings.get("save_plot", False)
+    autotrim = settings.get("autotrim", True)
+
     data_dict = {}
 
     for file_path in [fp for fp in glob.glob(os.path.join(folder_path, "*.lvm")) if "MAX" not in os.path.basename(fp)]:
@@ -95,7 +102,6 @@ Rückgabe:
         df = pd.read_csv(file_path, sep="\t", decimal=",", skiprows=0, header=21)
         df.columns = df.columns.astype(str)
         df = df.apply(pd.to_numeric, errors='coerce')
-
 
         df["Time [s]"] = correct_time_jumps(df["Time [s]"])
         file_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -136,35 +142,39 @@ Rückgabe:
         print("file_name for weight regex:", file_name)
         #remove U and "comment" colums
         clean_df = clean_data(df)
-       # print(clean_df)
-        clean_df = trim_low_force_periods(clean_df, threshold=10, min_duration=3, buffer= 2)
-       # print(clean_df)
+        # print(clean_df)
+        clean_df = trim_low_force_periods(clean_df, threshold=10, min_duration=3, buffer=2)
+
+        print("autotrim", autotrim)
+        if autotrim:
+            # Zeit startet bei 0
+            clean_df["Time [s]"] = clean_df["Time [s]"] - clean_df["Time [s]"].iloc[0]
 
         g1r = clean_df[["Time [s]"] + [col for col in clean_df.columns if "1" in col]]
         g2l = clean_df[["Time [s]"] + [col for col in clean_df.columns if "2" in col]]
 
-
         # Gemeinsames Zeitintervall für beide Griffe bestimmen
         start_g1r, end_g1r = get_flank_time_range(g1r)
-        print("start_g1r, end_g1r", start_g1r, end_g1r) 
+        print("start_g1r, end_g1r", start_g1r, end_g1r)
         start_g2l, end_g2l = get_flank_time_range(g2l)
         print("start_g2l, end_g2l", start_g2l, end_g2l)
         global_start = min(start_g1r, start_g2l)
         print("global_start", global_start)
         global_end = max(end_g1r, end_g2l)
         print("global_end", global_end)
+
         # Trimme die Datenframes auf den gemeinsamen Zeitbereich
         g1r = g1r[(g1r["Time [s]"] >= global_start) & (g1r["Time [s]"] <= global_end)].reset_index(drop=True)
         g2l = g2l[(g2l["Time [s]"] >= global_start) & (g2l["Time [s]"] <= global_end)].reset_index(drop=True)
-        
+
         # Angleichung der Längen beider Seiten nach dem Trimmen
         min_len = min(len(g1r), len(g2l))
         g1r = g1r.iloc[:min_len].reset_index(drop=True)
         g2l = g2l.iloc[:min_len].reset_index(drop=True)
 
         if usefilter:
-            g1r_filtered = apply_filter(g1r,SVGwindowlength, SVGpolyorder, mode='interp' )
-            g2l_filtered = apply_filter(g2l,SVGwindowlength, SVGpolyorder, mode='interp')
+            g1r_filtered = apply_filter(g1r, SVGwindowlength, SVGpolyorder, mode='interp')
+            g2l_filtered = apply_filter(g2l, SVGwindowlength, SVGpolyorder, mode='interp')
             data_dict[file_name] = {
                 "G1R": {"data": g1r_filtered, "stats": get_min_max_values_per_column(g1r_filtered)},
                 "G2L": {"data": g2l_filtered, "stats": get_min_max_values_per_column(g2l_filtered)},
