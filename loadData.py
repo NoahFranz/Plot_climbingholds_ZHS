@@ -1,3 +1,4 @@
+from typing import List, Dict, Any
 import glob
 import os
 import re
@@ -98,14 +99,14 @@ def split_grip_sides(df):
 
 # --- Datenberechnung ---
 
-def compute_contact_times(file_data: dict, force_keys: list[str]) -> None:
+def compute_contact_times(file_data: Dict, force_keys: List[str]) -> None:
     for side in ["G1R", "G2L"]:
         contact_times = get_force_contact_times(file_data[side]["data"], force_keys)
         file_data[side]["contact_time"] = contact_times
         stats = compute_contact_time_stats_per_force(contact_times)
         file_data[side]["contact_time_stats"] = stats
 
-def compute_impulses(file_data: dict, force_keys: list[str]) -> None:
+def compute_impulses(file_data: Dict, force_keys: List[str]) -> None:
     for side in ["G1R", "G2L"]:
         impulses = {}
         for force in force_keys:
@@ -228,7 +229,7 @@ def export_impulse_data(file_data, fname, folder_path):
 
 # --- Hauptfunktion ---
 
-def load_lvm_data(folder_path, *, settings) -> dict[str, dict]:
+def load_lvm_data(folder_path, *, settings) -> Dict[str, Dict[str, Dict[str, Any]]]:
     """
 Lädt .lvm-Dateien aus dem angegebenen Verzeichnis und bereitet sie für die spätere Analyse auf.
 
@@ -261,7 +262,7 @@ Rückgabe:
 """
     SVGwindowlength = settings.get("SVGwindowlength")
     SVGpolyorder = settings.get("SVGpolyorder")
-    usefilter = settings.get("usefilter", False)
+    usefilter = settings.get("use_filter", False)
     normalizeByweight = settings.get("normalizeByweight", False)
     save_plot = settings.get("save_plot", False)
     autotrim = settings.get("autotrim", True)
