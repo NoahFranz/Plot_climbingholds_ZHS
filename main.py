@@ -37,7 +37,7 @@ def main():
     settings = {
         "SVGwindowlength": filter_settings["window_length"],
         "SVGpolyorder": filter_settings["polyorder"],
-        "usefilter": filter_settings["use_filter"],
+        "use_filter": filter_settings["use_filter"],
         "normalizeByweight": filter_settings["normalize_by_weight"],
         "save_plot": plot_settings["save"],
         "autotrim": filter_settings["autotrim"]
@@ -50,7 +50,6 @@ def main():
         optional_suffix += "_raw"
     if cutoff.get("active", False):
         optional_suffix += f"_trimmed-S{cutoff['start']}-E{cutoff['end']}"
-
     
     all_lvm_data_dict, forces_g1, forces_g2 = prepare_data(all_lvm_data_dict, forces_to_plot, cutoff)
     if all_lvm_data_dict is None:
