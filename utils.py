@@ -8,6 +8,8 @@ def clean_data(df):
     """
     columns_to_drop = [col for col in df.columns if "U" in col or "Comment" in col or "X_Value" in col]
     df_clean = df.drop(columns=columns_to_drop)
+    # Entferne doppelte Leerzeichen aus Spaltennamen
+    df_clean.columns = df_clean.columns.str.replace(r'\s+', ' ', regex=True)
     return df_clean
 
 
@@ -45,10 +47,10 @@ def get_min_max_values_per_column(df):
 def compute_global_ylimits_for_plots(plot_dict, forces_g1, forces_g2, margin=1.2):
     """
     Berechnet die globalen y-Achsen-Grenzen für beide Griffe (G2L und G1R)
-    und fügt diese als 'global_limits' zum plot_dict hinzu.
+    und fügt diese als 'global_y_limits' zum plot_dict hinzu.
     Es wird das extremste y_max und das kleinste y_min beider Griffe verwendet.
     """
-    global_limits = {}
+    global_y_limits = {}
 
     # Initialisiere max/min für G1 und G2 mit extremen Werten
     cols_g2 = [col for col in plot_dict["G2L"]["data"].columns if any(force in col for force in forces_g2)]
@@ -66,13 +68,13 @@ def compute_global_ylimits_for_plots(plot_dict, forces_g1, forces_g2, margin=1.2
     global_y_max = y_max
     global_y_min = y_min
 
-    # Speichern der globalen Limits in global_limits
-    global_limits["global_y_min"] = global_y_min
-    global_limits["global_y_max"] = global_y_max
+    # Speichern der globalen Limits in global_y_limits
+    global_y_limits["global_y_min"] = global_y_min
+    global_y_limits["global_y_max"] = global_y_max
 
     # Füge die globalen Limits zum plot_dict hinzu
-    plot_dict["G1R"]["global_limits"] = global_limits
-    plot_dict["G2L"]["global_limits"] = global_limits
+    plot_dict["G1R"]["global_y_limits"] = global_y_limits
+    plot_dict["G2L"]["global_y_limits"] = global_y_limits
 
     # Rückgabe des aktualisierten plot_dict
     return plot_dict
@@ -151,11 +153,11 @@ def print_current_dict_summary(current_dict):
                 min_v = f"{v['min']:.1f}"
                 max_v = f"{v['max']:.1f}"
                 print(f"      {k}: min= {min_v}, max= {max_v}")
-            if "global_limits" in content:
-                gl = content["global_limits"]
-                print(f"    global_limits: min= {gl['global_y_min']:.2f}, max= {gl['global_y_max']:.2f}")
+            if "global_y_limits" in content:
+                gl = content["global_y_limits"]
+                print(f"    global_y_limits: min= {gl['global_y_min']:.2f}, max= {gl['global_y_max']:.2f}")
             else:
-                print("    global_limits: Nicht gesetzt")
+                print("    global_y_limits: Nicht gesetzt")
 
 
 def _find_active_segment(time: pd.Series, mask: pd.Series, min_duration: float) -> Optional[Tuple[float, float]]:
@@ -365,3 +367,56 @@ def get_unique_selected_forces(forces_to_plot: Dict[str, Dict[str, bool]]) -> Li
             if force != "all" and selected and force not in unique_forces:
                 unique_forces.append(force)
     return unique_forces
+
+def print_nested_keys(d, indent=0):
+    """
+    Gibt alle Keys einer verschachtelten Dictionary-Struktur aus.
+    """
+    for key, value in d.items():
+        print("  " * indent + f"- {key}")
+        if isinstance(value, dict):
+            print_nested_keys(value, indent + 1)
+
+
+def trim_low_force_periods(df, force_cols=["Fy"], threshold=10, min_duration=3.0, buffer=3.0):
+    """
+    Entfernt Abschnitte, in denen alle angegebenen Kräfte über längere Zeit unterhalb eines Schwellenwerts liegen.
+    Behalte jedoch jeweils einen Puffer von 'buffer' Sekunden davor und danach.
+    """
+    time = df["Time [s]"]
+    mask = np.zeros(len(df), dtype=bool)
+
+    for col in force_cols:
+        if col not in df.columns:
+            continue
+        abs_low = df[col].abs() < threshold
+        mask = mask | abs_low  # Nur wenn ALLE Kräfte niedrig, könnte man `&=` verwenden
+
+    low_force_df = df[mask]
+    intervals = []
+    start_idx = None
+    for i, is_low in enumerate(mask):
+        if is_low and start_idx is None:
+            start_idx = i
+        elif not is_low and start_idx is not None:
+            end_idx = i
+            duration = time.iloc[end_idx-1] - time.iloc[start_idx]
+            if duration >= min_duration:
+                t_start = max(0, time.iloc[start_idx] - buffer)
+                t_end = time.iloc[end_idx-1] + buffer
+                intervals.append((t_start, t_end))
+            start_idx = None
+    # Falls am Ende noch ein Intervall offen ist
+    if start_idx is not None:
+        duration = time.iloc[-1] - time.iloc[start_idx]
+        if duration >= min_duration:
+            t_start = max(0, time.iloc[start_idx] - buffer)
+            t_end = time.iloc[-1] + buffer
+            intervals.append((t_start, t_end))
+
+    # Jetzt löschen wir alle Zeitpunkte innerhalb dieser "Inaktivitätsintervalle"
+    drop_mask = np.zeros(len(df), dtype=bool)
+    for t0, t1 in intervals:
+        drop_mask |= (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
+
+    return df[~drop_mask].reset_index(drop=True)
