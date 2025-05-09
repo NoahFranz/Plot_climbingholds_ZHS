@@ -52,6 +52,11 @@ def run_gui():
     bar_frame = tk.LabelFrame(scrollable_frame, text="Bar-Optionen")
     bar_frame.pack(pady=5, padx=10, fill="x", anchor="center")
 
+    # Neue Checkbox: Balkendiagramm plotten
+    plot_bar_var = tk.BooleanVar(value=False)
+    plot_bar_checkbox = tk.Checkbutton(bar_frame, text="Balkendiagramm plotten", variable=plot_bar_var)
+    plot_bar_checkbox.pack(anchor="center", padx=5)
+
     # Signal-/Daten-Optionen
     signal_frame = tk.LabelFrame(scrollable_frame, text="Signal-Optionen")
     signal_frame.pack(pady=5, padx=10, fill="x", anchor="center")
@@ -142,6 +147,11 @@ def run_gui():
     )
     normalize_by_weight_checkbox.pack(anchor="center", pady=2, padx=5)
 
+    # Neue Checkbox: Auto-Trimming aktivieren
+    autotrim_var = tk.BooleanVar(value=True)
+    autotrim_checkbox = tk.Checkbutton(signal_frame, text="Auto-Trimming aktivieren", variable=autotrim_var)
+    autotrim_checkbox.pack(anchor="center", pady=2, padx=5)
+
     tk.Label(svg_options_frame, text="Fensterlänge:").pack(anchor="w", padx=5)
     window_length_entry = tk.Entry(svg_options_frame, textvariable=window_length_var)
     window_length_entry.pack(fill="x", padx=5)
@@ -203,7 +213,7 @@ def run_gui():
     griff_g1_var = tk.BooleanVar(value=True)
     griff_g2_var = tk.BooleanVar(value=True)
 
-    g1_all_var = tk.BooleanVar(value=True)
+    g1_all_var = tk.BooleanVar(value=False)
     
     def update_griff_all():
         griff_g1_var.set(griff_all_var.get())
@@ -279,7 +289,7 @@ def run_gui():
     kraefte_g2_frame = tk.LabelFrame(kraefte_frame, text="G2")
     kraefte_g2_frame.pack(side="right", padx=10, pady=10, fill="both")
     
-    g2_all_var = tk.BooleanVar(value=True)
+    g2_all_var = tk.BooleanVar(value=False)
     
     g2_Fy_var = tk.BooleanVar(value=True)
     g2_Fz_var = tk.BooleanVar(value=True)
@@ -382,7 +392,8 @@ def run_gui():
         "compare_forces": compare_forces_var.get(),
         "show_impulses": show_impulses_var.get(),
         "bar_split": bar_split_var.get(),
-        "show_values": show_values_var.get()
+        "show_values": show_values_var.get(),
+        "plot_bar": plot_bar_var.get()
     }
 
     filter_settings = {
@@ -390,6 +401,7 @@ def run_gui():
         "window_length": window_length_var.get(),
         "polyorder": polyorder_var.get(),
         "normalize_by_weight": normalize_by_weight_var.get(),
+        "autotrim": autotrim_var.get(),
     }
 
     file_paths = {
