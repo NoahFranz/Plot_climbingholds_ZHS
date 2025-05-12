@@ -1,4 +1,3 @@
-
 import matplotlib.pyplot as plt
 import pandas as pd
 from plotUITLS import*
@@ -7,6 +6,64 @@ from typing import List, Dict, Any, Optional, Tuple, Union
 import numpy as np
 import os  # für Dateisystemoperationen
 from utils import print_nested_keys
+COLOR_MAPPING = {
+    "Fy": "orange",
+    "Fx": "green",
+    "Fz": "blue",
+    "Mz": "#8B1A1A",  # Kaminrot
+    "FgR": "#9ACD32",
+    "FgR_calc": "#32CD32",
+    "Fres_YZ": "#4B0082",     # Indigo
+    "φ_yz": "#800080",      # Lila
+    "Fres_xyz": "red"     # Orange-Rot
+}
+
+
+
+
+def annotate_impulses_on_axis(ax: plt.Axes, side_data: Dict[str, Any], forces: List[str], labeloffset: float = 0.0):
+    impulses_dict = side_data.get("impulses", {})
+    contact_time = side_data.get("contact_time", {})
+    if "Fres_xyz" not in forces:
+        forces.insert(0, "Fres_xyz")
+    print("forces in annotate_impulses_on_axis: ", forces)
+
+    # Kontaktzeit nur einmal pro Intervall anzeigen – z. B. von 'Fz'
+    primary_force = None
+    for f in ["Fz", "Fy", "Fx"]:
+        if f in contact_time:
+            primary_force = f
+            break
+
+    if primary_force:
+        ivals = contact_time.get(primary_force, [])
+        for (t0, t1) in ivals:
+            ct = t1 - t0
+            x_pos = t1 + 0.1
+            ylims = ax.get_ylim()
+            y_pos_ct = ylims[0] + 0.85 * (ylims[1] - ylims[0])
+
+            # position Contct time text
+            ax.text(x_pos, y_pos_ct, f"{ct:.1f}s", color="grey", ha="left", va="center", fontsize=6)
+
+    for force in forces:
+        imp_list = impulses_dict.get(force, [])
+        ivals = contact_time.get(force, [])
+
+        for i, ((imp, (t0, t1))) in enumerate(zip(imp_list, ivals)):
+            try:
+                imp_val = float(imp)
+                if abs(imp_val) > 0 and t1 > t0:
+                    x_pos = t1 + 0.1
+                    ylims = ax.get_ylim()
+                    y_pos = ylims[0] + 0.82 * (ylims[1] - ylims[0]) - labeloffset
+                 #   print(f"y_pos: {y_pos:.2f}, force: {force}")
+                    txt = f"{force.replace('F', 'P', 1).replace('res_', '')}: {imp_val:.1f}"
+                    ax.text(x_pos, y_pos, txt, color="grey", ha="left", va="center", fontsize=6)
+            except Exception as e:
+                logger.warning(f"Fehler beim Anzeigen von Impuls {force}: {e}")
+
+        labeloffset += 3  # Offset für die nächste Kraft erhöhen
 
 
 # plotdata.py: Sammlung von Funktionen zum Erstellen von Diagrammen für Kraft- und Impulsdaten
@@ -62,16 +119,7 @@ def _plot_force_lines(ax: plt.Axes, df: pd.DataFrame, forces: List[str],
             ax.plot(time, df[col], label=clean_label(force) + suffix,
                     color=color_map.get(force, "black"), alpha=alpha)
 
-COLOR_MAPPING = {
-    "Fy": "orange",
-    "Fx": "green",
-    "Fz": "blue",
-    "Mz": "#8B1A1A",  # Kaminrot
-    "FgR": "#9ACD32",
-    "FgR_calc": "#32CD32",
-    "Fres": "#4B0082",     # Indigo
-    "φ_yz": "#800080"      # Lila
-}
+
 
 def plot_single_hold_splitview(
     hold_data: pd.DataFrame,
@@ -204,8 +252,14 @@ def plot_data_per_hold(
     """
     print("     executing: plo_data_per_hold")
     print("     current file_dict:")
-   # print_nested_keys(plot_dict, 1)
-    
+    print_nested_keys(plot_dict, 1)
+
+    # Remove "Fres_xyz" from forces_g1 and forces_g2 if it exists
+    if "Fres_xyz" in forces_g1:
+        forces_g1.remove("Fres_xyz")
+    if "Fres_xyz" in forces_g2:
+        forces_g2.remove("Fres_xyz")
+
     try:
         figstyle = "2G"
         grip_label = "OL_UR"
@@ -261,34 +315,18 @@ def plot_data_per_hold(
            
             # Optional: Kontaktzeiten als halbtransparente Flächen markieren und alle Impulse pro Intervall anzeigen
             if show_contact_time:
-                # Kontaktzeiten als halbtransparente Flächen markieren
+                # Kontaktzeiten als halbtransparente Flächen markieren (nur für die Kontaktzeiten der ersten Kraft)
                 contact_time = plot_dict["G2L"].get("contact_time", {})
-                for force in forces_g2:
-                    ivals = contact_time.get(force, [])
+                if forces_g2:
+                    first_force = forces_g2[0]
+                    ivals = contact_time.get(first_force, [])
                     for (t0, t1) in ivals:
                         ax_left.axvspan(t0, t1,
-                                        color=get_color_for(force, "G2L"),
+                                        color=get_color_for(first_force, "G2L"),
                                         alpha=0.15)
-
-                # Alle Impulse pro Intervall anzeigen
-                impulses_dict = plot_dict["G2L"].get("impulses", {})
-                contact_time = plot_dict["G2L"].get("contact_time", {})
-                for force in forces_g2:
-                    imp_list = impulses_dict.get(force, [])
-                    ivals = contact_time.get(force, [])
-                    for (imp, (t0, t1)) in zip(imp_list, ivals):
-                        try:
-                            imp_val = float(imp)
-                            if abs(imp_val) > 0 and t1 > t0:
-                                # Place label at right end of interval, 3/4 up the y-axis
-                                x_pos = t1+0.5
-                                ylims = ax_left.get_ylim()
-                                y_pos = ylims[0] + 0.75 * (ylims[1] - ylims[0])
-                                ct = t1 - t0
-                                txt = f"{imp_val:.1f}\n({ct:.2f}s)"
-                                ax_left.text(x_pos, y_pos, txt, color="grey", ha="left", va="center", fontsize=6)
-                        except Exception as e:
-                            logger.warning(f"Fehler beim Anzeigen von Impuls {force} für G2L: {e}")
+                
+                # Alle Impulse pro Intervall anzeigen und Kontaktzeit nach letztem Impuls annotieren
+                annotate_impulses_on_axis(ax_left, plot_dict["G2L"], forces_g2)
 
             # Zusammenführen von Primär- und Sekundär-Legenden
             combine_legends(ax_left, sec_ax_left, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
@@ -327,37 +365,19 @@ def plot_data_per_hold(
                     y_min_mz_right, y_max_mz_right = compute_ylimits(mz_df_right, margin=margin)
                     sec_ax_right.set_ylim([y_min_mz_right, y_max_mz_right])
                 
+                
                 # Optional: Kontaktzeiten als halbtransparente Flächen markieren
                 if show_contact_time:
                     contact_time = plot_dict["G1R"].get("contact_time", {})
-                    for force in forces_g1:
-                        ivals = contact_time.get(force, [])
+                    if forces_g1:
+                        first_force = forces_g1[0]
+                        ivals = contact_time.get(first_force, [])
                         for (t0, t1) in ivals:
                             ax_right.axvspan(t0, t1,
-                                             color=get_color_for(force, "G1R"),
+                                             color=get_color_for(first_force, "G1R"),
                                              alpha=0.15)
-                
-                
-                # Alle Impulse pro Intervall anzeigen
-                impulses_dict = plot_dict["G1R"].get("impulses", {})
-                contact_time = plot_dict["G1R"].get("contact_time", {})
-                for force in forces_g1:
-                    imp_list = impulses_dict.get(force, [])
-                    ivals = contact_time.get(force, [])
-                    for (imp, (t0, t1)) in zip(imp_list, ivals):
-                        try:
-                            imp_val = float(imp)
-                            if abs(imp_val) > 0 and t1 > t0:
-                                # Place label at right end of interval, 3/4 up the y-axis
-                                x_pos = t1+0.5
-                                ylims = ax_right.get_ylim()
-                                y_pos = ylims[0] + 0.75 * (ylims[1] - ylims[0])
-                                ct = t1 - t0
-                                txt = f"{imp_val:.1f}\n({ct:.2f}s)"
-                                ax_right.text(x_pos, y_pos, txt, color="grey", ha="left", va="center", fontsize=6)
-                        except Exception as e:
-                            logger.warning(f"Fehler beim Anzeigen von Impuls {force} für G1R: {e}")
-                combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
+                    annotate_impulses_on_axis(ax_right, plot_dict["G1R"], forces_g1, labeloffset=2)
+                    combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
         # Zeitbereich mit kleinem Puffer setzen, damit Linien nicht abgeschnitten werden
         time_min = min(time_left.min(), time_right.min()) if has_g1 else time_left.min()
         time_max = max(time_left.max(), time_right.max()) if has_g1 else time_left.max()
