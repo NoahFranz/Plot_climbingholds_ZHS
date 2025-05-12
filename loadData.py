@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 import glob
 import os
 import re
+import json
 
 import numpy as np
 import pandas as pd
@@ -102,18 +103,55 @@ def split_grip_sides(df):
 def compute_contact_times(file_data: Dict, force_keys: List[str]) -> None:
     for side in ["G1R", "G2L"]:
         contact_times = get_force_contact_times(file_data[side]["data"], force_keys)
+        
         file_data[side]["contact_time"] = contact_times
+        # Ensure all forces in force_keys share the same contact intervals
+        primary_force = "Fz" if "Fz" in contact_times else next(iter(contact_times), None)
+        if primary_force:
+            shared_times = contact_times[primary_force]
+            for force in force_keys:
+                if force not in contact_times:
+                    contact_times[force] = shared_times
+        print(f"{side} contact times:", {k: v for k, v in contact_times.items()})
         stats = compute_contact_time_stats_per_force(contact_times)
         file_data[side]["contact_time_stats"] = stats
 
 def compute_impulses(file_data: Dict, force_keys: List[str]) -> None:
+    """
+    Berechnet die Impulse für jede Kraft pro Griffseite und speichert sie im file_data-Dictionary.
+    """
     for side in ["G1R", "G2L"]:
         impulses = {}
         for force in force_keys:
             ctimes = file_data[side]["contact_time"].get(force, [])
-            impulses[force] = compute_impulses_per_contact(
-                file_data[side]["data"], ctimes, force
-            )
+            if force in ["Fx", "Mz"]:
+                impulses[force] = compute_impulses_per_contact(
+                    file_data[side]["data"], ctimes, force, use_abs=True
+                )
+            else:
+                impulses[force] = compute_impulses_per_contact(
+                    file_data[side]["data"], ctimes, force
+                )
+
+        # Compute total resultant force impulse over Fz intervals
+        res_impulses = []
+        df = file_data[side]["data"]
+        intervals = file_data[side]["contact_time"].get("Fz", [])
+
+        if "Fres_xyz" in df.columns:
+            for t0, t1 in intervals:
+                mask = (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
+                fres = df.loc[mask, "Fres_xyz"]
+                time = df.loc[mask, "Time [s]"]
+                impulse = np.trapz(fres, x=time)
+                res_impulses.append(impulse)
+
+        impulses["F_total"] = res_impulses
+
+        # Store a clean copy under "all" without including "all" itself recursively
+        impulses_filtered = {k: v for k, v in impulses.items() if k != "all"}
+        impulses["all"] = impulses_filtered
+        print(f"{side} all impulses: {impulses['all']}")
         file_data[side]["impulses"] = impulses
 
 def compute_contact_time_stats_per_force(contact_time_dict):
@@ -136,6 +174,40 @@ def compute_contact_time_stats_per_force(contact_time_dict):
         else:
             stats[force] = {'min': 0, 'max': 0, 'mean': 0}
     return stats
+
+
+# --- Neue Funktion: Kraftstatistiken pro Kontaktintervall ---
+def compute_interval_force_stats(file_data: Dict) -> None:
+    """
+    Berechnet Min, Max, Mittelwert für Fx, Fy, Fz innerhalb jedes Kontaktintervalls.
+    Speichert die Ergebnisse unter file_data[side]["intervals"]["I1"], ["I2"], ...
+    """
+    for side in ["G1R", "G2L"]:
+        df = file_data[side]["data"]
+        intervals = file_data[side]["contact_time"].get("Fz", [])
+        interval_stats = {}
+
+        for i, (t0, t1) in enumerate(intervals):
+            mask = (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
+            segment = df.loc[mask]
+
+            stats_entry = {
+                "contact_time": (round(t0, 3), round(t1, 3))
+            }
+
+            for force in ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_YZ"]:
+                force_cols = [col for col in df.columns if force in col]
+                if force_cols:
+                    series = segment[force_cols].sum(axis=1)
+                    stats_entry[force] = {
+                        "min": round(series.min(), 1),
+                        "max": round(series.max(), 1),
+                        "mean": round(series.mean(), 1)
+                    }
+
+            interval_stats[f"I{i+1}"] = stats_entry
+
+        file_data[side]["intervals"] = interval_stats
 
 def calc_FgR(current_dict):
     """
@@ -163,24 +235,29 @@ def calc_FgR(current_dict):
 
 def calc_resultant_fy_fz(current_dict):
     """
-    Fügt den DataFrames 'Fres' und 'phiyz' hinzu:
-      - 'Fres' ist die resultierende Kraft aus Fy und Fz.
-      - 'phiyz' ist der Winkel von Fres bezogen auf die Senkrechte (Erdbeschleunigung), korrigiert um 40°.
+    Fügt den DataFrames 'Fres_YZ' und 'phiyz' hinzu:
+      - 'Fres_YZ' ist die resultierende Kraft aus Fy und Fz.
+      - 'phiyz' ist der Winkel von Fres_YZ bezogen auf die Senkrechte (Erdbeschleunigung), korrigiert um 40°.
     """
     for file_data in current_dict.values():
         for side in ["G1R", "G2L"]:
             df = file_data[side]["data"]
             fy_cols = [col for col in df.columns if "Fy" in col]
             fz_cols = [col for col in df.columns if "Fz" in col]
+            fx_cols = [col for col in df.columns if "Fx" in col]
 
             if fy_cols and fz_cols:
                 fy = df[fy_cols[0]]
                 fz = df[fz_cols[0]]
-                fres = np.sqrt(fy**2 + fz**2)
+                Fres_YZ = np.sqrt(fy**2 + fz**2)
+                if fx_cols:
+                    fx = df[fx_cols[0]]
+                    Fres_xyz = np.sqrt(fy**2 + fz**2 + fx**2)
                 angle = np.rad2deg(np.arctan2(fz, fy))  # Winkel in Grad
                 phiyz = angle - 40  # Bezug zur Senkrechten (Wandwinkel)
 
-                df.loc[:, "Fres"] = fres
+                df.loc[:, "Fres_YZ"] = Fres_YZ
+                df.loc[:, "Fres_xyz"] = Fres_xyz
                 df.loc[:, "φ_yz"] = phiyz
 
 
@@ -220,8 +297,9 @@ def export_impulse_data(file_data, fname, folder_path):
                     f.write(f"  {force_name} Kontaktzeiten: {ctimes_str}\n")
                     impulses_side = file_data[side]["impulses"].get(force_name, {})
                     for comp, vals in impulses_side.items():
+                        label = comp.replace("F", "P", 1) if comp.startswith("F") else comp
                         vals_str = ", ".join(f"{v:.1f}" for v in vals)
-                        f.write(f"    {comp}: [{vals_str}]\n")
+                        f.write(f"    {label}: [{vals_str}]\n")
         print(f"Impulsdaten gespeichert in: {txt_path}")
     except Exception as e:
         print(f"Fehler beim Schreiben der Impulsdatei '{txt_path}': {e}")
@@ -254,8 +332,8 @@ Struktur des Rückgabewerts:
 
 Zusätzlich werden folgende Spalten ergänzt:
   - 'FgR_calc': Berechnete relative Griffkraft
-  - 'Fres': Resultierende aus Fy und Fz
-  - 'φ_yz': Winkel zwischen Fres und der Senkrechten (korrigiert um 40°)
+  - 'Fres_YZ': Resultierende aus Fy und Fz
+  - 'φ_yz': Winkel zwischen Fres_YZ und der Senkrechten (korrigiert um 40°)
 
 Rückgabe:
   dict[str, dict[str, dict[str, Any]]]
@@ -340,16 +418,37 @@ Rückgabe:
             if normalizeByweight and climberforce is not None and isinstance(climberforce, (int, float)):
                 normalize_forces_by_weight(df, climberforce)
 
-        # Berechne Fres und φ_yz für beide Seiten
+        # Berechne Fres_YZ und φ_yz für beide Seiten
         calc_resultant_fy_fz(data_dict)
 
     # Berechne und speichere die Aktivitäts-Kontaktzeiten und Impulse für jede Kraft pro Griff
-    force_keys = ["Fy", "Fx", "Fz", "Mz"]
+    force_keys = ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_YZ"]
     for fname, file_data in data_dict.items():
         compute_contact_times(file_data, force_keys)
+        compute_interval_force_stats(file_data)
         compute_impulses(file_data, force_keys)
         if save_plot:
             export_impulse_data(file_data, fname, folder_path)
+    
+
+    # Kopie ohne "data"-Einträge
+    exportable_dict = {}
+    for fname, content in data_dict.items():
+        exportable_dict[fname] = {}
+        for key, val in content.items():
+            if key in ["G1R", "G2L"]:
+                exportable_dict[fname][key] = {k: v for k, v in val.items() if k != "data"}
+            else:
+                exportable_dict[fname][key] = val
+
+    # Speicherpfad definieren
+    output_path = os.path.join(folder_path, "summary_metadata.json")
+    try:
+        with open(output_path, "w") as f:
+            json.dump(exportable_dict, f, indent=2)
+        print(f"Zusammenfassung gespeichert unter: {output_path}")
+    except Exception as e:
+        print(f"Fehler beim Speichern der JSON-Datei: {e}")
 
     return data_dict if data_dict else None
 
