@@ -25,7 +25,7 @@ def main():
         optional_suffix += "_IMP"
     
  
-    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Exploration_V1"
+    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Exploration_V1/plot_pipeline/"
     save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
     optional_suffix = file_paths["suffix"] or ""
     optional_suffix = "_" + optional_suffix if optional_suffix else ""
@@ -78,7 +78,7 @@ def main():
                 split_grips=plot_settings["bar_split"],    # Nur ein Plot, beide Griffe nebeneinander
                 show_values=plot_settings["show_values"],     # Werte über Balken anzeigen
                 figsize=(6.3, 8),      # Plotgröße
-                title="Impulsvergleich aller Athleten",
+                title="Impulsvergleich aller dateien",
                 normalizebyweight=normalizebyweight,
                 save_folder=save_folder,
                 save_plot=plot_settings["save"],
