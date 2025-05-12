@@ -226,61 +226,97 @@ def get_force_contact_times(
       { 'Fz': [(t0, t1), ...], 'Fx': [(t0, t1), ...], ... }
     """
     # Default hardcoded thresholds & force set (for quick tests)
-    start_threshold = 1.3
-    end_threshold = 1.1
-    forces = {"Fz"}
+    default_start_threshold = 1.3
+    default_end_threshold = 1.1
+    # Use both Fz and Fy for detection logic
+    forces_detect = {"Fz", "Fy"}
     contact_time = {}
     time = df[time_col]
     # If a single threshold is given, override only the start threshold
     if threshold is not None:
-        start_threshold = threshold
+        default_start_threshold = threshold
 
-    for force in forces:
-        # max-Wert über alle Spalten dieser Kraft
+    # Compute force series and masks for both Fz and Fy
+    force_series = {}
+    mask_start_dict = {}
+    mask_end_dict = {}
+    threshold_start_dict = {}
+    threshold_end_dict = {}
+    for force in forces_detect:
         cols = [c for c in df.columns if force in c]
         if not cols:
             continue
         series = df[cols].max(axis=1)
-        # Determine start/end thresholds: use absolute threshold if provided, else fraction of max
+        force_series[force] = series
         threshold_start = (
-            start_threshold if start_threshold is not None
-            else series.max() * start_frac
+            default_start_threshold if start_threshold is None else start_threshold
+            if force == "Fz" else
+            default_start_threshold
         )
         threshold_end = (
-            end_threshold if end_threshold is not None
-            else series.max() * end_frac
+            default_end_threshold if end_threshold is None else end_threshold
+            if force == "Fz" else
+            default_end_threshold
         )
+        threshold_start_dict[force] = threshold_start
+        threshold_end_dict[force] = threshold_end
+        mask_start_dict[force] = series > threshold_start
+        mask_end_dict[force] = series <= threshold_end
 
-        # Build masks: start = rising above start_threshold; end = falling to/below end_threshold
-        mask_start = series > threshold_start
-        mask_end   = series <= threshold_end
+    # Find all rising-edge indices in Fz where an interval could start
+    mask_start_fz = mask_start_dict.get("Fz", pd.Series([False]*len(df), index=df.index))
+    mask_end_fz = mask_end_dict.get("Fz", pd.Series([False]*len(df), index=df.index))
+    start_edges_fz = mask_start_fz & ~mask_start_fz.shift(fill_value=False)
+    start_idxs_fz = time.index[start_edges_fz]
 
-        # Find all rising-edge indices where an interval could start
-        start_edges = mask_start & ~mask_start.shift(fill_value=False)
-        start_idxs = time.index[start_edges]
+    force_intervals = []
+    for fz_start_idx in start_idxs_fz:
+        t0_fz = time.loc[fz_start_idx]
+        # Only consider end after t0
+        mask_end_after_fz = mask_end_fz & (time >= t0_fz)
+        if mask_end_after_fz.any():
+            end_idx_fz = mask_end_after_fz[mask_end_after_fz].index[0]
+            t1_fz = time.loc[end_idx_fz]
+        else:
+            t1_fz = time.iloc[-1]
 
-        force_intervals = []
-        for start_idx in start_idxs:
-            t0 = time.loc[start_idx]
-            # Only consider end after t0
-            mask_end_after = mask_end & (time >= t0)
-            if mask_end_after.any():
-                end_idx = mask_end_after[mask_end_after].index[0]
-                t1 = time.loc[end_idx]
-            else:
-                t1 = time.iloc[-1]
-            # Accept only intervals where duration ≥ end_dur
-            if (t1 - t0) >= end_dur:
-                # --- Zusatzbedingung: min. einmal Fz >= 5 innerhalb des Intervalls ---
- 
-                # Suche die richtige Fz-Spalte im DataFrame - pro Griff-Dict gibt es nur eine
-                Fz_cols = [col for col in df.columns if "Fz" in col]
-                mask_interval = (df[time_col] >= t0) & (df[time_col] <= t1)
-                # Prüfe, ob irgendein Wert >= 5 ist
-                if Fz_cols and (df.loc[mask_interval, Fz_cols] >= 5).any().any():
-                    force_intervals.append((t0, t1))
+        # Compute corresponding start and end indices for Fy
+        mask_start_fy = mask_start_dict.get("Fy", pd.Series([False]*len(df), index=df.index))
+        mask_end_fy = mask_end_dict.get("Fy", pd.Series([False]*len(df), index=df.index))
+        # Find first index >= t0_fz where Fy mask_start is True
+        mask_start_after_fy = mask_start_fy & (time >= t0_fz)
+        if mask_start_after_fy.any():
+            fy_start_idx = mask_start_after_fy[mask_start_after_fy].index[0]
+            t0_fy = time.loc[fy_start_idx]
+        else:
+            t0_fy = t0_fz
+            fy_start_idx = fz_start_idx
+        # Find first index >= t0_fz where Fy mask_end is True
+        mask_end_after_fy = mask_end_fy & (time >= t0_fz)
+        if mask_end_after_fy.any():
+            fy_end_idx = mask_end_after_fy[mask_end_after_fy].index[0]
+            t1_fy = time.loc[fy_end_idx]
+        else:
+            t1_fy = t1_fz
+            fy_end_idx = end_idx_fz
 
-        contact_time[force] = force_intervals
+        # Use min of Fz and Fy for start, max for end
+        final_start_idx = min(fz_start_idx, fy_start_idx)
+        final_end_idx = max(end_idx_fz, fy_end_idx)
+        t0 = time.loc[final_start_idx]
+        t1 = time.loc[final_end_idx]
+
+        # Accept only intervals where duration ≥ end_dur
+        if (t1 - t0) >= end_dur:
+            # Zusatzbedingung: min. einmal Fz >= 5 innerhalb des Intervalls
+            Fz_cols = [col for col in df.columns if "Fz" in col]
+            mask_interval = (df[time_col] >= t0) & (df[time_col] <= t1)
+            if Fz_cols and (df.loc[mask_interval, Fz_cols] >= 5).any().any():
+                force_intervals.append((t0, t1))
+
+    # Store the resulting time intervals under both 'Fz' and 'Fy'
+    for force_name in ["Fz", "Fy"]:
+        contact_time[force_name] = list(force_intervals)
 
     return contact_time
 
@@ -328,11 +364,15 @@ def compute_impulses_per_contact(
     df: pd.DataFrame,
     contact_time: List,
     force: str,
+    use_abs: bool = False,
     time_col: str = "Time [s]"
 ) -> List:
     """
     Berechnet den Impuls (Integral über Kraft·Zeit) für jedes Intervall in `contact_time`.
+    Optional: Betrag der Kraftwerte verwenden (z. B. für Fx oder Mz).
     """
+    if force == "Fx" or force == "Mz":
+            use_abs = True
     impulses = []
     for t0, t1 in contact_time:
         mask = (df[time_col] >= t0) & (df[time_col] <= t1)
@@ -342,9 +382,10 @@ def compute_impulses_per_contact(
             impulses.append(0.0)
             continue
         f_vals = df.loc[mask, cols].sum(axis=1).values
+        if use_abs:
+            f_vals = np.abs(f_vals)
         imp = float(np.trapz(f_vals, t_vals))
-        imp = round(imp, 1)
-        impulses.append(imp)
+        impulses.append(round(imp, 1))
     return impulses
 
 
@@ -395,23 +436,23 @@ def trim_low_force_periods(df, force_cols: List[str] = ["Fy"], threshold=10, min
 
     low_force_df = df[mask]
     intervals = []
-    start_idx = None
+    fz_start_idx = None
     for i, is_low in enumerate(mask):
-        if is_low and start_idx is None:
-            start_idx = i
-        elif not is_low and start_idx is not None:
+        if is_low and fz_start_idx is None:
+            fz_start_idx = i
+        elif not is_low and fz_start_idx is not None:
             end_idx = i
-            duration = time.iloc[end_idx-1] - time.iloc[start_idx]
+            duration = time.iloc[end_idx-1] - time.iloc[fz_start_idx]
             if duration >= min_duration:
-                t_start = max(0, time.iloc[start_idx] - buffer)
+                t_start = max(0, time.iloc[fz_start_idx] - buffer)
                 t_end = time.iloc[end_idx-1] + buffer
                 intervals.append((t_start, t_end))
-            start_idx = None
+            fz_start_idx = None
     # Falls am Ende noch ein Intervall offen ist
-    if start_idx is not None:
-        duration = time.iloc[-1] - time.iloc[start_idx]
+    if fz_start_idx is not None:
+        duration = time.iloc[-1] - time.iloc[fz_start_idx]
         if duration >= min_duration:
-            t_start = max(0, time.iloc[start_idx] - buffer)
+            t_start = max(0, time.iloc[fz_start_idx] - buffer)
             t_end = time.iloc[-1] + buffer
             intervals.append((t_start, t_end))
 
