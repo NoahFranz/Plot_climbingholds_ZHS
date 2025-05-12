@@ -179,9 +179,10 @@ def compute_contact_time_stats_per_force(contact_time_dict):
 # --- Neue Funktion: Kraftstatistiken pro Kontaktintervall ---
 def compute_interval_force_stats(file_data: Dict) -> None:
     """
-    Berechnet Min, Max, Mittelwert für Fx, Fy, Fz innerhalb jedes Kontaktintervalls.
+    Berechnet Min, Max, Mittelwert und Impuls für Fx, Fy, Fz innerhalb jedes Kontaktintervalls.
     Speichert die Ergebnisse unter file_data[side]["intervals"]["I1"], ["I2"], ...
     """
+    from utils import compute_impulses_per_contact  # ensure this import is present at top of file
     for side in ["G1R", "G2L"]:
         df = file_data[side]["data"]
         intervals = file_data[side]["contact_time"].get("Fz", [])
@@ -192,17 +193,21 @@ def compute_interval_force_stats(file_data: Dict) -> None:
             segment = df.loc[mask]
 
             stats_entry = {
-                "contact_time": (round(t0, 3), round(t1, 3))
+                "interval_timing": (round(t0, 3), round(t1, 3)),
+                "duration_s": round(t1 - t0, 3)
             }
 
-            for force in ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_YZ"]:
+            for force in ["Fy", "Fz", "Fx", "Mz", "Fres_xyz", "Fres_YZ"]:
                 force_cols = [col for col in df.columns if force in col]
                 if force_cols:
                     series = segment[force_cols].sum(axis=1)
+                    # Impulsberechnung: Fx und Mz als Betrag, sonst normal
+                    impulse = float(np.trapz(np.abs(series) if force in ["Fx", "Mz"] else series, x=segment["Time [s]"]))
                     stats_entry[force] = {
                         "min": round(series.min(), 1),
                         "max": round(series.max(), 1),
-                        "mean": round(series.mean(), 1)
+                        "mean": round(series.mean(), 1),
+                        "impuls": round(impulse, 1)
                     }
 
             interval_stats[f"I{i+1}"] = stats_entry
@@ -235,7 +240,8 @@ def calc_FgR(current_dict):
 
 def calc_resultant_fy_fz(current_dict):
     """
-    Fügt den DataFrames 'Fres_YZ' und 'phiyz' hinzu:
+    Fügt den DataFrames 'Fres_xyz','Fres_YZ' und 'phiyz' hinzu:
+      - 'Fres_xyz' ist die resultierende Kraft aus Fy, Fz und Fx.
       - 'Fres_YZ' ist die resultierende Kraft aus Fy und Fz.
       - 'phiyz' ist der Winkel von Fres_YZ bezogen auf die Senkrechte (Erdbeschleunigung), korrigiert um 40°.
     """
@@ -253,6 +259,9 @@ def calc_resultant_fy_fz(current_dict):
                 if fx_cols:
                     fx = df[fx_cols[0]]
                     Fres_xyz = np.sqrt(fy**2 + fz**2 + fx**2)
+                else:
+                    Fres_xyz = None
+                    print(f"Keine Fx-Spalte in {side} gefunden. Fres_xyz wird nicht berechnet.")
                 angle = np.rad2deg(np.arctan2(fz, fy))  # Winkel in Grad
                 phiyz = angle - 40  # Bezug zur Senkrechten (Wandwinkel)
 
@@ -303,6 +312,64 @@ def export_impulse_data(file_data, fname, folder_path):
         print(f"Impulsdaten gespeichert in: {txt_path}")
     except Exception as e:
         print(f"Fehler beim Schreiben der Impulsdatei '{txt_path}': {e}")
+
+
+# --- Neue Funktion: Excel-Export ---
+def export_data_to_excel(file_data, fname, folder_path):
+    excel_path = os.path.join(folder_path, f"{fname}_summary.xlsx")
+    with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
+        # Metadaten
+        meta_df = pd.DataFrame({
+            "athletename": [file_data.get("athletename", "")],
+            "climberforce": [file_data.get("climberforce", "")],
+            "file_identity": [file_data.get("file_identity", "")]
+        })
+        meta_df.to_excel(writer, sheet_name="Metadata", index=False)
+
+        for side in ["G1R", "G2L"]:
+            # Kontaktzeiten
+            contact = file_data[side].get("contact_time", {})
+            if contact:
+                contact_df = pd.DataFrame({k: pd.Series([v]) for k, v in contact.items()})
+                contact_df.to_excel(writer, sheet_name=f"{side}_Contact", index=False)
+
+            # Impulse
+            impulses = file_data[side].get("impulses", {})
+            impulses_df = pd.DataFrame({k: pd.Series(v) for k, v in impulses.items() if k != "all"})
+            impulses_df.to_excel(writer, sheet_name=f"{side}_Impulses", index=False)
+
+            # Intervalle
+            intervals = file_data[side].get("intervals", {})
+            if intervals:
+                int_rows = []
+                for int_key, stats in intervals.items():
+                    base_info = {
+                        "intervall_id": int_key,
+                        "interval_timing": stats["interval_timing"],
+                        "duration_s": stats["duration_s"]
+                    }
+                    for force, values in stats.items():
+                        if force in ["interval_timing", "duration_s"]:
+                            continue
+                        row = {"intervall_id": int_key, "force": force}
+                        row.update(values)
+                        row.update(base_info)
+                        int_rows.append(row)
+                    int_rows.append({})  # Leere Zeile nach jedem Intervall
+
+                int_df = pd.DataFrame(int_rows)
+                cols = ["intervall_id", "interval_timing", "duration_s","force",  "max", "min", "mean", "impuls"]
+                int_df = int_df[cols]
+                int_df.to_excel(writer, sheet_name=f"{side}_Intervals", index=False)
+                worksheet = writer.sheets[f"{side}_Intervals"]
+                from openpyxl.styles import Font
+                bold_font = Font(bold=True)
+                for row in worksheet.iter_rows(min_row=2, max_row=worksheet.max_row):
+                    for cell in row:
+                        if cell.column_letter in ['D', 'E', 'H']:  # force, max, impuls
+                            cell.font = bold_font
+
+    print(f"Excel-Export abgeschlossen: {excel_path}")
 
 
 # --- Hauptfunktion ---
@@ -427,8 +494,10 @@ Rückgabe:
         compute_contact_times(file_data, force_keys)
         compute_interval_force_stats(file_data)
         compute_impulses(file_data, force_keys)
+        export_data_to_excel(file_data, fname, folder_path)
         if save_plot:
             export_impulse_data(file_data, fname, folder_path)
+           
     
 
     # Kopie ohne "data"-Einträge
