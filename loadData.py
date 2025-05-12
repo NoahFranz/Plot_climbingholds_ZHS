@@ -495,8 +495,8 @@ Rückgabe:
         compute_interval_force_stats(file_data)
         compute_impulses(file_data, force_keys)
         export_data_to_excel(file_data, fname, folder_path)
-        if save_plot:
-            export_impulse_data(file_data, fname, folder_path)
+      #  if save_plot:
+          #  export_impulse_data(file_data, fname, folder_path)
            
     
 
