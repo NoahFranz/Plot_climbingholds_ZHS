@@ -103,7 +103,7 @@ def run_gui():
     create_plots_checkbox.pack(side="left", padx=10)
 
     # Option für Impuls-Berechnung anzeigen
-    show_impulses_var = tk.BooleanVar(value=False)
+    show_impulses_var = tk.BooleanVar(value=True)
     show_impulses_checkbox = tk.Checkbutton(time_frame, text="Impuls anzeigen", variable=show_impulses_var)
     show_impulses_checkbox.pack(anchor="center", pady=2, padx=5)
 
@@ -267,17 +267,19 @@ def run_gui():
     # Für G1
     kraefte_g1_frame = tk.LabelFrame(kraefte_frame, text="G1")
     kraefte_g1_frame.pack(side="left", padx=10, pady=10, fill="both")
-    
+
     g1_Fy_var = tk.BooleanVar(value=True)
     g1_Fz_var = tk.BooleanVar(value=True)
     g1_Fx_var = tk.BooleanVar(value=True)
     g1_Mz_var = tk.BooleanVar(value=False)
     g1_FgR_var = tk.BooleanVar(value=False)
     g1_Fres_var = tk.BooleanVar(value=False)
-    g1_Fres_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres", variable=g1_Fres_var, command=lambda: update_kraft_g1_single())
+    g1_Fres_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres_YZ", variable=g1_Fres_var, command=lambda: update_kraft_g1_single())
+    g1_Fres_xyz_var = tk.BooleanVar(value=False)
+    g1_Fres_xyz_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres_XYZ", variable=g1_Fres_xyz_var, command=lambda: update_kraft_g1_single())
     g1_phi_var = tk.BooleanVar(value=False)
     g1_phi_cb = tk.Checkbutton(kraefte_g1_frame, text="φ_yz", variable=g1_phi_var, command=lambda: update_kraft_g1_single())
-    
+
     def update_kraefte_g1():
         g1_Fy_var.set(g1_all_var.get())
         g1_Fx_var.set(g1_all_var.get())
@@ -285,14 +287,23 @@ def run_gui():
         g1_Mz_var.set(g1_all_var.get())
         g1_FgR_var.set(g1_all_var.get())
         g1_Fres_var.set(g1_all_var.get())
+        g1_Fres_xyz_var.set(g1_all_var.get())
         g1_phi_var.set(g1_all_var.get())
 
     def update_kraft_g1_single():
-        if not all([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get(), g1_Fres_var.get(), g1_phi_var.get()]):
+        if not all([
+            g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(),
+            g1_Mz_var.get(), g1_FgR_var.get(), g1_Fres_var.get(),
+            g1_Fres_xyz_var.get(), g1_phi_var.get()
+        ]):
             g1_all_var.set(False)
-        if any([g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(), g1_Mz_var.get(), g1_FgR_var.get(), g1_Fres_var.get(), g1_phi_var.get()]):
+        if any([
+            g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(),
+            g1_Mz_var.get(), g1_FgR_var.get(), g1_Fres_var.get(),
+            g1_Fres_xyz_var.get(), g1_phi_var.get()
+        ]):
             griff_g1_var.set(True)
-    
+
     g1_all_cb = tk.Checkbutton(kraefte_g1_frame, text="all", variable=g1_all_var, command=update_kraefte_g1)
     g1_Fy_cb = tk.Checkbutton(kraefte_g1_frame, text="Fy", variable=g1_Fy_var, command=update_kraft_g1_single)
     g1_Fz_cb = tk.Checkbutton(kraefte_g1_frame, text="Fz", variable=g1_Fz_var, command=update_kraft_g1_single)
@@ -308,43 +319,55 @@ def run_gui():
     g1_Mz_cb.pack(anchor="w")
     g1_FgR_cb.pack(anchor="w")
     g1_Fres_cb.pack(anchor="w")
+    g1_Fres_xyz_cb.pack(anchor="w")
     g1_phi_cb.pack(anchor="w")
     
     # Für G2
     kraefte_g2_frame = tk.LabelFrame(kraefte_frame, text="G2")
     kraefte_g2_frame.pack(side="right", padx=10, pady=10, fill="both")
-    
+
     g2_all_var = tk.BooleanVar(value=False)
-    
+
     g2_Fy_var = tk.BooleanVar(value=True)
     g2_Fz_var = tk.BooleanVar(value=True)
     g2_Fx_var = tk.BooleanVar(value=True)
     g2_Mz_var = tk.BooleanVar(value=False)
-    g2_FgR_var = tk.BooleanVar(value=False)    
+    g2_FgR_var = tk.BooleanVar(value=False)
     g2_Fres_var = tk.BooleanVar(value=False)
-    g2_Fres_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres", variable=g2_Fres_var, command=lambda: update_kraft_g2_single())
+    g2_Fres_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres_YZ", variable=g2_Fres_var, command=lambda: update_kraft_g2_single())
+    g2_Fres_xyz_var = tk.BooleanVar(value=False)
+    g2_Fres_xyz_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres_XYZ", variable=g2_Fres_xyz_var, command=lambda: update_kraft_g2_single())
     g2_phi_var = tk.BooleanVar(value=False)
     g2_phi_cb = tk.Checkbutton(kraefte_g2_frame, text="φ_yz", variable=g2_phi_var, command=lambda: update_kraft_g2_single())
 
     def update_kraefte_g2():
         g2_Fy_var.set(g2_all_var.get())
         g2_Fz_var.set(g2_all_var.get())
-        g2_Fx_var.set(g2_all_var.get()) 
+        g2_Fx_var.set(g2_all_var.get())
         g2_Mz_var.set(g2_all_var.get())
         g2_FgR_var.set(g2_all_var.get())
         g2_Fres_var.set(g2_all_var.get())
+        g2_Fres_xyz_var.set(g2_all_var.get())
         g2_phi_var.set(g2_all_var.get())
-    
+
     def update_kraft_g2_single():
-        if not all([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get(), g2_Fres_var.get(), g2_phi_var.get()]):
+        if not all([
+            g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(),
+            g2_Mz_var.get(), g2_FgR_var.get(), g2_Fres_var.get(),
+            g2_Fres_xyz_var.get(), g2_phi_var.get()
+        ]):
             g2_all_var.set(False)
-        if any([g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(), g2_Mz_var.get(), g2_FgR_var.get(), g2_Fres_var.get(), g2_phi_var.get()]):
+        if any([
+            g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(),
+            g2_Mz_var.get(), g2_FgR_var.get(), g2_Fres_var.get(),
+            g2_Fres_xyz_var.get(), g2_phi_var.get()
+        ]):
             griff_g2_var.set(True)
-    
+
     g2_all_cb = tk.Checkbutton(kraefte_g2_frame, text="all", variable=g2_all_var, command=update_kraefte_g2)
     g2_Fy_cb = tk.Checkbutton(kraefte_g2_frame, text="Fy", variable=g2_Fy_var, command=update_kraft_g2_single)
     g2_Fz_cb = tk.Checkbutton(kraefte_g2_frame, text="Fz", variable=g2_Fz_var, command=update_kraft_g2_single)
-    g2_Fx_cb = tk.Checkbutton(kraefte_g2_frame, text="Fx", variable=g2_Fx_var, command=update_kraft_g2_single)  
+    g2_Fx_cb = tk.Checkbutton(kraefte_g2_frame, text="Fx", variable=g2_Fx_var, command=update_kraft_g2_single)
     g2_Mz_cb = tk.Checkbutton(kraefte_g2_frame, text="Mz", variable=g2_Mz_var, command=update_kraft_g2_single)
     g2_FgR_cb = tk.Checkbutton(kraefte_g2_frame, text="FgR", variable=g2_FgR_var, command=update_kraft_g2_single)
 
@@ -356,6 +379,7 @@ def run_gui():
     g2_Mz_cb.pack(anchor="w")
     g2_FgR_cb.pack(anchor="w")
     g2_Fres_cb.pack(anchor="w")
+    g2_Fres_xyz_cb.pack(anchor="w")
     g2_phi_cb.pack(anchor="w")
 
     
@@ -455,7 +479,8 @@ def run_gui():
             "Fz": g1_Fz_var.get(),
             "Mz": g1_Mz_var.get(),
             "FgR": g1_FgR_var.get(),
-            "Fres": g1_Fres_var.get(),
+            "Fres_YZ": g1_Fres_var.get(),
+            "Fres_XYZ": g1_Fres_xyz_var.get(),
             "φ_yz": g1_phi_var.get()
         },
         "G2": {
@@ -464,7 +489,8 @@ def run_gui():
             "Fz": g2_Fz_var.get(),
             "Mz": g2_Mz_var.get(),
             "FgR": g2_FgR_var.get(),
-            "Fres": g2_Fres_var.get(),
+            "Fres_YZ": g2_Fres_var.get(),
+            "Fres_XYZ": g2_Fres_xyz_var.get(),
             "φ_yz": g2_phi_var.get()
         }
     }
