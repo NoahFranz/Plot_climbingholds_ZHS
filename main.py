@@ -25,8 +25,8 @@ def main():
         optional_suffix += "_IMP"
     
  
-    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_ LabView_Messungen/Exploration_V1/plot_pipeline/"
-    save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/Plot_Figures"
+    folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V1/plot_pipeline/"
+    save_folder = file_paths["save_folder"] or folder_path
     optional_suffix = file_paths["suffix"] or ""
     optional_suffix = "_" + optional_suffix if optional_suffix else ""
     optional_suffix += get_force_suffix(forces_to_plot)
@@ -62,7 +62,7 @@ def main():
     for filename, file_data in all_lvm_data_dict.items():
         print("\n+++++++++++ new File ++++++++++++++")
         all_lvm_data_dict[filename] = compute_global_ylimits_for_plots(file_data, forces_g1, forces_g2, ylims=ylims)
-        print_current_dict_summary(current_dict=all_lvm_data_dict)
+        #print_current_dict_summary(current_dict=all_lvm_data_dict)
 
     # Wenn "Plots erstellen" aktiviert ist:
     if plot_settings["create"]:
