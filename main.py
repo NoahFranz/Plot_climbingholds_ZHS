@@ -12,7 +12,7 @@ def main():
     if result is None:
         print("GUI abgebrochen.")
         return
-    plot_settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff = result
+    plot_settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff, selected_metric = result
     
     normalizebyweight = filter_settings["normalize_by_weight"]
     
@@ -71,19 +71,15 @@ def main():
         print("\n ----------------------------------------------")      
 
         if plot_settings["plot_bar"] == True:
-            for curr_force in unique_force_list:
-                plot_impulses_bar(
-                all_lvm_data_dict,
-                forces="Fz",           # ODER "Fy" usw.
-                split_grips=plot_settings["bar_split"],    # Nur ein Plot, beide Griffe nebeneinander
-                show_values=plot_settings["show_values"],     # Werte über Balken anzeigen
-                figsize=(6.3, 8),      # Plotgröße
-                title="Impulsvergleich aller dateien",
-                normalizebyweight=normalizebyweight,
-                save_folder=save_folder,
+            plot_mean_metrics_bar(
+                all_lvm_data_dict=all_lvm_data_dict,
+                forces=unique_force_list,
+                metric=selected_metric,
+                side="G2L",
+                figsize=(8, 6),
+                title=f"Mean-Metrics: {selected_metric}",
                 save_plot=plot_settings["save"],
-                optional_suffix=optional_suffix
-                
+                save_folder=save_folder
             )
         else:    
             # Fall 1: Normale kombinierte Darstellung von G1R und G2L (kein Split, kein Vergleich)
