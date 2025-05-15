@@ -13,7 +13,7 @@ COLOR_MAPPING = {
     "Mz": "#8B1A1A",  # Kaminrot
     "FgR": "#9ACD32",
     "FgR_calc": "#32CD32",
-    "Fres_YZ": "#4B0082",     # Indigo
+    "Fres_yz": "#4B0082",     # Indigo
     "φ_yz": "#800080",      # Lila
     "Fres_xyz": "red"     # Orange-Rot
 }
@@ -24,8 +24,6 @@ COLOR_MAPPING = {
 def annotate_impulses_on_axis(ax: plt.Axes, side_data: Dict[str, Any], forces: List[str], labeloffset: float = 0.0):
     impulses_dict = side_data.get("impulses", {})
     contact_time = side_data.get("contact_time", {})
-    if "Fres_xyz" not in forces:
-        forces.insert(0, "Fres_xyz")
     print("forces in annotate_impulses_on_axis: ", forces)
 
     # Kontaktzeit nur einmal pro Intervall anzeigen – z. B. von 'Fz'
@@ -57,13 +55,29 @@ def annotate_impulses_on_axis(ax: plt.Axes, side_data: Dict[str, Any], forces: L
                     x_pos = t1 + 0.1
                     ylims = ax.get_ylim()
                     y_pos = ylims[0] + 0.82 * (ylims[1] - ylims[0]) - labeloffset
-                 #   print(f"y_pos: {y_pos:.2f}, force: {force}")
                     txt = f"{force.replace('F', 'P', 1).replace('res_', '')}: {imp_val:.1f}"
                     ax.text(x_pos, y_pos, txt, color="grey", ha="left", va="center", fontsize=6)
             except Exception as e:
                 logger.warning(f"Fehler beim Anzeigen von Impuls {force}: {e}")
 
         labeloffset += 3  # Offset für die nächste Kraft erhöhen
+
+    # Separate Anzeige für Fres_xyz, falls vorhanden
+    intervals = side_data.get("intervals", {})
+    for key, val in intervals.items():
+        fres_data = val.get("Fres_xyz", {})
+        timing = val.get("interval_timing", None)
+        if fres_data and timing and "impuls" in fres_data:
+            try:
+                imp_val = float(fres_data["impuls"])
+                t1 = timing[1]
+                x_pos = t1 + 0.1
+                ylims = ax.get_ylim()
+                y_pos = ylims[0] + 0.82 * (ylims[1] - ylims[0]) - labeloffset
+                ax.text(x_pos, y_pos, f"Pxyz: {imp_val:.1f}", color="grey", ha="left", va="center", fontsize=6)
+            except Exception as e:
+                logger.warning(f"Fehler beim Anzeigen von Fres_xyz Impuls: {e}")
+
 
 
 # plotdata.py: Sammlung von Funktionen zum Erstellen von Diagrammen für Kraft- und Impulsdaten
@@ -252,14 +266,14 @@ def plot_data_per_hold(
     """
     print("     executing: plo_data_per_hold")
     print("     current file_dict:")
-    print_nested_keys(plot_dict, 1)
+   # print_nested_keys(plot_dict, 1)
 
-    # Remove "Fres_xyz" from forces_g1 and forces_g2 if it exists
-    if "Fres_xyz" in forces_g1:
-        forces_g1.remove("Fres_xyz")
-    if "Fres_xyz" in forces_g2:
-        forces_g2.remove("Fres_xyz")
-
+#   # Remove "Fres_xyz" from forces_g1 and forces_g2 if it exists
+#   if "Fres_xyz" in forces_g1:
+#       forces_g1.remove("Fres_xyz")
+#   if "Fres_xyz" in forces_g2:
+#       forces_g2.remove("Fres_xyz")
+#
     try:
         figstyle = "2G"
         grip_label = "OL_UR"
@@ -516,7 +530,7 @@ def plot_impulses_bar(
     # Initialisiere Listen für Athletennamen, Impulswerte und Kontaktzeiten
     print("\n +++++++++ in plot_impulse_bar ++++++++++")
     print("     forces: ", forces)
-    print_nested_keys(all_lvm_data_dict,1)
+  #  print_nested_keys(all_lvm_data_dict,1)
 
     # variable init
     optional_suffix += "_BAR"
@@ -707,3 +721,53 @@ def _plot_impulses_bar_combined(ax, indices, filtered_names, filtered_g1, filter
             txt = f"{g1:.1f}"
             txt_ct = f"\n({ct:.1f}s)"
             ax.text(bar.get_x() + bar.get_width()/2, bar.get_height(), txt + txt_ct, ha="center", va="bottom", fontsize=fontsize, color="grey")
+
+
+def plot_mean_metrics_bar(
+    all_lvm_data_dict: Dict[str, Any],
+    forces: List[str],
+    metric: str = "impuls",  # "mean", "max", "min" etc.
+    side: str = "G2L",
+    figsize: Tuple[int, int] = (12, 6),
+    title: str = "Mean Metrics",
+    save_plot: bool = False,
+    save_folder: str = "."
+) -> None:
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import os
+
+    labels, plot_data = [], []
+
+    for fname, content in all_lvm_data_dict.items():
+        metrics = content.get(side, {}).get("intervals", {}).get("Mean-Metrics", {})
+        if not metrics:
+            continue
+        row = []
+        for force in forces:
+            val = metrics.get(force, {}).get(metric, 0)
+            row.append(val)
+        plot_data.append(row)
+        labels.append(content.get("file_identity", fname))
+
+    plot_data = np.array(plot_data)
+    x = np.arange(len(labels))
+    width = 0.8 / len(forces)
+
+    fig, ax = plt.subplots(figsize=figsize)
+    for i, force in enumerate(forces):
+        base_key = next((f for f in COLOR_MAPPING if f in force), None)
+        color = COLOR_MAPPING.get(base_key, "black")
+        ax.bar(x + i * width, plot_data[:, i], width, label=force, color=color)
+
+    ax.set_ylabel(f"{metric}")
+    ax.set_title(title)
+    ax.set_xticks(x + width * (len(forces) - 1) / 2)
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.legend()
+    plt.tight_layout()
+
+    if save_plot:
+        path = os.path.join(save_folder, f"{title}_{metric}.png")
+        plt.savefig(path)
+    plt.show()
