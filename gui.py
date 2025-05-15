@@ -57,6 +57,13 @@ def run_gui():
     plot_bar_checkbox = tk.Checkbutton(bar_frame, text="Balkendiagramm plotten", variable=plot_bar_var)
     plot_bar_checkbox.pack(anchor="center", padx=5)
 
+    # Auswahl der Metrik (z. B. "impuls", "mean", "max", "min")
+    metric_label = tk.Label(bar_frame, text="Metrik:")
+    metric_label.pack(anchor="center")
+    metric_var = tk.StringVar(value="impuls")
+    metric_dropdown = tk.OptionMenu(bar_frame, metric_var, "impuls", "mean", "max", "min")
+    metric_dropdown.pack(anchor="center", padx=5)
+
     # Signal-/Daten-Optionen
     signal_frame = tk.LabelFrame(scrollable_frame, text="Signal-Optionen")
     signal_frame.pack(pady=5, padx=10, fill="x", anchor="center")
@@ -274,9 +281,9 @@ def run_gui():
     g1_Mz_var = tk.BooleanVar(value=False)
     g1_FgR_var = tk.BooleanVar(value=False)
     g1_Fres_var = tk.BooleanVar(value=False)
-    g1_Fres_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres_YZ", variable=g1_Fres_var, command=lambda: update_kraft_g1_single())
+    g1_Fres_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres_yz", variable=g1_Fres_var, command=lambda: update_kraft_g1_single())
     g1_Fres_xyz_var = tk.BooleanVar(value=False)
-    g1_Fres_xyz_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres_XYZ", variable=g1_Fres_xyz_var, command=lambda: update_kraft_g1_single())
+    g1_Fres_xyz_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres_xyz", variable=g1_Fres_xyz_var, command=lambda: update_kraft_g1_single())
     g1_phi_var = tk.BooleanVar(value=False)
     g1_phi_cb = tk.Checkbutton(kraefte_g1_frame, text="φ_yz", variable=g1_phi_var, command=lambda: update_kraft_g1_single())
 
@@ -334,9 +341,9 @@ def run_gui():
     g2_Mz_var = tk.BooleanVar(value=False)
     g2_FgR_var = tk.BooleanVar(value=False)
     g2_Fres_var = tk.BooleanVar(value=False)
-    g2_Fres_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres_YZ", variable=g2_Fres_var, command=lambda: update_kraft_g2_single())
+    g2_Fres_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres_yz", variable=g2_Fres_var, command=lambda: update_kraft_g2_single())
     g2_Fres_xyz_var = tk.BooleanVar(value=False)
-    g2_Fres_xyz_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres_XYZ", variable=g2_Fres_xyz_var, command=lambda: update_kraft_g2_single())
+    g2_Fres_xyz_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres_xyz", variable=g2_Fres_xyz_var, command=lambda: update_kraft_g2_single())
     g2_phi_var = tk.BooleanVar(value=False)
     g2_phi_cb = tk.Checkbutton(kraefte_g2_frame, text="φ_yz", variable=g2_phi_var, command=lambda: update_kraft_g2_single())
 
@@ -479,8 +486,8 @@ def run_gui():
             "Fz": g1_Fz_var.get(),
             "Mz": g1_Mz_var.get(),
             "FgR": g1_FgR_var.get(),
-            "Fres_YZ": g1_Fres_var.get(),
-            "Fres_XYZ": g1_Fres_xyz_var.get(),
+            "Fres_yz": g1_Fres_var.get(),
+            "Fres_xyz": g1_Fres_xyz_var.get(),
             "φ_yz": g1_phi_var.get()
         },
         "G2": {
@@ -489,10 +496,10 @@ def run_gui():
             "Fz": g2_Fz_var.get(),
             "Mz": g2_Mz_var.get(),
             "FgR": g2_FgR_var.get(),
-            "Fres_YZ": g2_Fres_var.get(),
-            "Fres_XYZ": g2_Fres_xyz_var.get(),
+            "Fres_yz": g2_Fres_var.get(),
+            "Fres_xyz": g2_Fres_xyz_var.get(),
             "φ_yz": g2_phi_var.get()
         }
     }
     
-    return plot_settings, griff_options, kraefte_options, filter_settings, file_paths, cutoff
+    return plot_settings, griff_options, kraefte_options, filter_settings, file_paths, cutoff, metric_var.get()
