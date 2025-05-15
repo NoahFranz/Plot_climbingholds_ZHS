@@ -113,8 +113,6 @@ def compute_contact_times(file_data: Dict, force_keys: List[str]) -> None:
                 if force not in contact_times:
                     contact_times[force] = shared_times
         print(f"{side} contact times:", {k: v for k, v in contact_times.items()})
-        stats = compute_contact_time_stats_per_force(contact_times)
-        file_data[side]["contact_time_stats"] = stats
 
 def compute_impulses(file_data: Dict, force_keys: List[str]) -> None:
     """
@@ -154,26 +152,6 @@ def compute_impulses(file_data: Dict, force_keys: List[str]) -> None:
         print(f"{side} all impulses: {impulses['all']}")
         file_data[side]["impulses"] = impulses
 
-def compute_contact_time_stats_per_force(contact_time_dict):
-    """
-    Erwartet contact_time_dict = {'Fz': [(t0, t1), ...], ...}
-    Gibt ein Dict zurück: {'Fz': {'min':..., 'max':..., 'mean':...}, ...}
-    """
-    stats = {}
-    for force, intervals in contact_time_dict.items():
-        if not intervals:
-            stats[force] = {'min': 0, 'max': 0, 'mean': 0}
-            continue
-        durations = [round(t1-t0, 1) for t0, t1 in intervals if t1 > t0]
-        if durations:
-            stats[force] = {
-                'min': round(min(durations), 1),
-                'max': round(max(durations), 1),
-                'mean': round(sum(durations) / len(durations), 1)
-            }
-        else:
-            stats[force] = {'min': 0, 'max': 0, 'mean': 0}
-    return stats
 
 
 # --- Neue Funktion: Kraftstatistiken pro Kontaktintervall ---
@@ -188,6 +166,16 @@ def compute_interval_force_stats(file_data: Dict) -> None:
         intervals = file_data[side]["contact_time"].get("Fz", [])
         interval_stats = {}
 
+        # Mapping for force to impulse name
+        force_map = {
+            "Fx": "Px",
+            "Fy": "Py",
+            "Fz": "Pz",
+            "Mz": "PMz",
+            "Fres_xyz": "Pxyz",
+            "Fres_yz": "Pyz"
+        }
+
         for i, (t0, t1) in enumerate(intervals):
             mask = (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
             segment = df.loc[mask]
@@ -197,11 +185,10 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                 "duration_s": round(t1 - t0, 3)
             }
 
-            for force in ["Fy", "Fz", "Fx", "Mz", "Fres_xyz", "Fres_YZ"]:
+            for force in force_map:
                 force_cols = [col for col in df.columns if force in col]
                 if force_cols:
                     series = segment[force_cols].sum(axis=1)
-                    # Impulsberechnung: Fx und Mz als Betrag, sonst normal
                     impulse = float(np.trapz(np.abs(series) if force in ["Fx", "Mz"] else series, x=segment["Time [s]"]))
                     stats_entry[force] = {
                         "min": round(series.min(), 1),
@@ -209,9 +196,36 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                         "mean": round(series.mean(), 1),
                         "impuls": round(impulse, 1)
                     }
+                    # Add impulse under new name as well
+                    stats_entry[force_map[force]] = round(impulse, 1)
 
             interval_stats[f"I{i+1}"] = stats_entry
 
+        # Mittelwerte über alle Intervalle hinweg berechnen
+        mean_metrics = {}
+        all_force_data = {}
+
+        # Only include forces, not the extra impulse keys
+        for entry in interval_stats.values():
+            for force, metrics in entry.items():
+                if force in ["interval_timing"]:
+                    continue
+                # Only aggregate for force stats, not the separate impulse keys
+                if isinstance(metrics, dict):
+                    if force not in all_force_data:
+                        all_force_data[force] = {"min": [], "max": [], "mean": [], "impuls": []}
+                    for key in ["min", "max", "mean", "impuls"]:
+                        val = metrics.get(key)
+                        if val is not None:
+                            all_force_data[force][key].append(val)
+
+        for force, metric_lists in all_force_data.items():
+            mean_metrics[force] = {
+                key: round(np.mean(vals), 2) if vals else None
+                for key, vals in metric_lists.items()
+            }
+
+        interval_stats["Mean-Metrics"] = mean_metrics
         file_data[side]["intervals"] = interval_stats
 
 def calc_FgR(current_dict):
@@ -240,10 +254,10 @@ def calc_FgR(current_dict):
 
 def calc_resultant_fy_fz(current_dict):
     """
-    Fügt den DataFrames 'Fres_xyz','Fres_YZ' und 'phiyz' hinzu:
+    Fügt den DataFrames 'Fres_xyz','Fres_yz' und 'phiyz' hinzu:
       - 'Fres_xyz' ist die resultierende Kraft aus Fy, Fz und Fx.
-      - 'Fres_YZ' ist die resultierende Kraft aus Fy und Fz.
-      - 'phiyz' ist der Winkel von Fres_YZ bezogen auf die Senkrechte (Erdbeschleunigung), korrigiert um 40°.
+      - 'Fres_yz' ist die resultierende Kraft aus Fy und Fz.
+      - 'phiyz' ist der Winkel von Fres_yz bezogen auf die Senkrechte (Erdbeschleunigung), korrigiert um 40°.
     """
     for file_data in current_dict.values():
         for side in ["G1R", "G2L"]:
@@ -255,7 +269,7 @@ def calc_resultant_fy_fz(current_dict):
             if fy_cols and fz_cols:
                 fy = df[fy_cols[0]]
                 fz = df[fz_cols[0]]
-                Fres_YZ = np.sqrt(fy**2 + fz**2)
+                Fres_yz = np.sqrt(fy**2 + fz**2)
                 if fx_cols:
                     fx = df[fx_cols[0]]
                     Fres_xyz = np.sqrt(fy**2 + fz**2 + fx**2)
@@ -265,7 +279,7 @@ def calc_resultant_fy_fz(current_dict):
                 angle = np.rad2deg(np.arctan2(fz, fy))  # Winkel in Grad
                 phiyz = angle - 40  # Bezug zur Senkrechten (Wandwinkel)
 
-                df.loc[:, "Fres_YZ"] = Fres_YZ
+                df.loc[:, "Fres_yz"] = Fres_yz
                 df.loc[:, "Fres_xyz"] = Fres_xyz
                 df.loc[:, "φ_yz"] = phiyz
 
@@ -316,7 +330,9 @@ def export_impulse_data(file_data, fname, folder_path):
 
 # --- Neue Funktion: Excel-Export ---
 def export_data_to_excel(file_data, fname, folder_path):
-    excel_path = os.path.join(folder_path, f"{fname}_summary.xlsx")
+    excel_folder = os.path.join(folder_path, "excel")
+    os.makedirs(excel_folder, exist_ok=True)
+    excel_path = os.path.join(excel_folder, f"{fname}_summary.xlsx")
     with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
         # Metadaten
         meta_df = pd.DataFrame({
@@ -343,23 +359,29 @@ def export_data_to_excel(file_data, fname, folder_path):
             if intervals:
                 int_rows = []
                 for int_key, stats in intervals.items():
-                    base_info = {
-                        "intervall_id": int_key,
-                        "interval_timing": stats["interval_timing"],
-                        "duration_s": stats["duration_s"]
-                    }
+                    base_info = {"intervall_id": int_key}
+                    if "interval_timing" in stats:
+                        base_info["interval_timing"] = stats["interval_timing"]
+                    if "duration_s" in stats:
+                        base_info["duration_s"] = stats["duration_s"]
                     for force, values in stats.items():
                         if force in ["interval_timing", "duration_s"]:
                             continue
                         row = {"intervall_id": int_key, "force": force}
-                        row.update(values)
+                        if isinstance(values, dict):
+                            row.update(values)
+                        else:
+                            row["impuls"] = values  # für einfache Impulse wie Px, Py etc.
                         row.update(base_info)
                         int_rows.append(row)
-                    int_rows.append({})  # Leere Zeile nach jedem Intervall
+                    # Add a DataFrame-compatible empty row after each interval
+                    int_rows.append({col: None for col in ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls"]})
 
+                int_rows = [row for row in int_rows if row]  # Remove empty dicts
                 int_df = pd.DataFrame(int_rows)
-                cols = ["intervall_id", "interval_timing", "duration_s","force",  "max", "min", "mean", "impuls"]
-                int_df = int_df[cols]
+                cols = ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls"]
+                existing_cols = [col for col in cols if col in int_df.columns]
+                int_df = int_df[existing_cols]
                 int_df.to_excel(writer, sheet_name=f"{side}_Intervals", index=False)
                 worksheet = writer.sheets[f"{side}_Intervals"]
                 from openpyxl.styles import Font
@@ -399,8 +421,8 @@ Struktur des Rückgabewerts:
 
 Zusätzlich werden folgende Spalten ergänzt:
   - 'FgR_calc': Berechnete relative Griffkraft
-  - 'Fres_YZ': Resultierende aus Fy und Fz
-  - 'φ_yz': Winkel zwischen Fres_YZ und der Senkrechten (korrigiert um 40°)
+  - 'Fres_yz': Resultierende aus Fy und Fz
+  - 'φ_yz': Winkel zwischen Fres_yz und der Senkrechten (korrigiert um 40°)
 
 Rückgabe:
   dict[str, dict[str, dict[str, Any]]]
@@ -485,11 +507,11 @@ Rückgabe:
             if normalizeByweight and climberforce is not None and isinstance(climberforce, (int, float)):
                 normalize_forces_by_weight(df, climberforce)
 
-        # Berechne Fres_YZ und φ_yz für beide Seiten
+        # Berechne Fres_yz und φ_yz für beide Seiten
         calc_resultant_fy_fz(data_dict)
 
     # Berechne und speichere die Aktivitäts-Kontaktzeiten und Impulse für jede Kraft pro Griff
-    force_keys = ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_YZ"]
+    force_keys = ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_yz"]
     for fname, file_data in data_dict.items():
         compute_contact_times(file_data, force_keys)
         compute_interval_force_stats(file_data)
