@@ -545,7 +545,6 @@ def plot_selected_forces_comparison(
             full_path = f"{save_folder}/{filename}.png"
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
             plt.savefig(full_path)
-            plt.savefig(full_path.replace(".png", ".svg"), format="svg")
             print(f"Plot gespeichert unter: {save_folder}")
         plt.show()
     except Exception as e:
@@ -749,7 +748,6 @@ def plot_mean_metrics_bar(
         # Ensure target directory exists before saving
         os.makedirs(os.path.dirname(path), exist_ok=True)
         plt.savefig(path)
-        plt.savefig(path.replace(".png", ".svg"), format="svg")
         print(f"Plot gespeichert unter: {path}")
     
 
@@ -829,7 +827,6 @@ def plot_force_vector_trace(
         # Ensure target directory exists before saving
         os.makedirs(os.path.dirname(path), exist_ok=True)
         plt.savefig(path)
-        plt.savefig(os.path.join(save_folder, f"{filename}.svg"), format="svg")
         print(f"Plot gespeichert unter: {path}")
     plt.show()
 def plot_FgR_sum(
