@@ -1,0 +1,49 @@
+Run Settings Export — 2025-05-19_22-07-18
+
+Selected Metric:
+  contact time
+
+Plot Settings:
+  SVGwindowlength: 11
+  SVGpolyorder: 5
+  use_filter: True
+  normalizeByweight: True
+  save_plot: True
+  autotrim: True
+
+Filter Settings:
+  use_filter: True
+  window_length: 11
+  polyorder: 5
+  normalize_by_weight: True
+  autotrim: True
+
+Cutoff:
+  active: False
+  start: 0
+  end: 0
+
+Holds to Plot:
+  all: True
+  R: True
+  G2L: True
+
+Forces to Plot:
+  G1R:
+    Fy: True
+    Fx: True
+    Fz: True
+    Mz: False
+    FgR: False
+    Fres_yz: False
+    Fres_xyz: False
+    φ_yz: False
+  G2L:
+    Fy: True
+    Fx: True
+    Fz: True
+    Mz: False
+    FgR: False
+    Fres_yz: False
+    Fres_xyz: False
+    φ_yz: False

@@ -12,6 +12,39 @@ from utils import clean_data, get_min_max_values_per_column
 from utils import get_force_contact_times, compute_impulses_per_contact, trim_low_force_periods
 
 
+# --- Neue Hilfsfunktion: Zeitbereich aus Kontaktzeiten bestimmen ---
+def get_trim_range_from_contact_times(g1r: pd.DataFrame, g2l: pd.DataFrame, autotrim: bool) -> tuple:
+    """
+    Ermittelt den globalen Start- und Endzeitpunkt basierend auf den Kontaktzeiten
+    beider Griffseiten. Nur relevant, wenn autotrim aktiviert ist.
+    """
+    if not autotrim:
+        global_start = g1r["Time [s]"].iloc[0]
+        global_end = g1r["Time [s]"].iloc[-1]
+        return global_start, global_end
+
+    temp_data = {
+        "G1R": {"data": g1r.copy()},
+        "G2L": {"data": g2l.copy()}
+    }
+    force_keys = ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_yz"]
+    compute_contact_times(temp_data, force_keys)
+
+    all_times = []
+    for side in ["G1R", "G2L"]:
+        contact_times = temp_data[side].get("contact_time", {})
+        all_times.extend(t for force in contact_times.values() for (t0, t1) in force for t in (t0, t1))
+
+    if all_times:
+        global_start = max(0, min(all_times) - 3)
+        global_end = max(all_times) + 3
+    else:
+        global_start = min(g1r["Time [s]"].iloc[0], g2l["Time [s]"].iloc[0])
+        global_end = max(g1r["Time [s]"].iloc[-1], g2l["Time [s]"].iloc[-1])
+
+    return global_start, global_end
+
+
 # --- Hilfsfunktionen ---
 
 def correct_time_jumps(time_series, threshold=2.0):
@@ -44,57 +77,9 @@ def parse_metadata_from_filename(file_name):
         result["identity"] = match.group(1)
     return result
 
-def get_flank_time_range(df, schwellwert=10, offset_sec=4, autotrim=True):
-    """
-    Gibt das globale Zeitintervall zurück, in dem gültige Daten liegen,
-    basierend auf Datenflankenerkennung in allen Fy-Spalten.
-    Berücksichtigt Flanken über alle Spalten hinweg.
-    Wenn autotrim=False, werden der erste und letzte Index des DataFrames verwendet.
-    """
-    if not autotrim:
-        # Wenn autotrim deaktiviert ist, verwende den gesamten Bereich des DataFrames
-        t_start = max(0, df["Time [s]"].iloc[0])
-        t_end = df["Time [s]"].iloc[-1]
-        return (t_start, t_end)
-
-    fy_cols = [col for col in df.columns if "Fy" in col]
-    if not fy_cols:
-        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
-    
-    global_start, global_end = None, None
-
-    for col in fy_cols:
-        diffs = np.abs(df[col].diff())
-        diffs = diffs.rolling(window=5, min_periods=1).mean()
-        # Debug: max diff vs. threshold in get_flank_time_range
-        max_diff = diffs.max()
-        print(f"[get_flank_time_range] Spalte '{col}': max diff = {max_diff:.3f}, schwellwert = {schwellwert}")
-        start_idx = diffs[diffs > schwellwert].first_valid_index()
-        end_idx = diffs[diffs > schwellwert].last_valid_index()
-        
-        if start_idx is not None:
-            curr_start_time = df.loc[start_idx, "Time [s]"]
-            global_start = curr_start_time if global_start is None else min(global_start, curr_start_time)
-            print(f"[get_flank_time_range] Spalte '{col}': global_start = {global_start:.3f}")
-        
-        if end_idx is not None:
-            curr_end_time = df.loc[end_idx, "Time [s]"]
-            global_end = curr_end_time if global_end is None else max(global_end, curr_end_time)
-            print(f"[get_flank_time_range] Spalte '{col}': global_end = {global_end:.3f}")
-
-    # Prüfen, ob keine Flanken gefunden wurden
-    if global_start is None or global_end is None:
-        return (df["Time [s]"].iloc[0], df["Time [s]"].iloc[-1])
-    
-    # Offset hinzufügen
-    t_start = max(0, global_start - offset_sec)
-    t_end = global_end + offset_sec
-    print("[t_start, t_end] = ", (t_start, t_end))
-    return (t_start, t_end)
-
 def split_grip_sides(df):
-    g1r = df[["Time [s]"] + [col for col in df.columns if "1" in col]]
-    g2l = df[["Time [s]"] + [col for col in df.columns if "2" in col]]
+    g1r = df[["Time [s]"] + ["FgR_sum [%]"] + [col for col in df.columns if "1" in col]]
+    g2l = df[["Time [s]"] + ["FgR_sum [%]"]+ [col for col in df.columns if "2" in col]]
     return g1r, g2l
 
 
@@ -103,7 +88,26 @@ def split_grip_sides(df):
 def compute_contact_times(file_data: Dict, force_keys: List[str]) -> None:
     for side in ["G1R", "G2L"]:
         contact_times = get_force_contact_times(file_data[side]["data"], force_keys)
-        
+
+        # Entferne Intervalle, die kürzer als 0.9 Sekunden sind
+        for force, intervals in contact_times.items():
+            filtered = [(t0, t1) for (t0, t1) in intervals if (t1 - t0) >= 0.9]
+            # --- Additional force threshold filter ---
+            df = file_data[side]["data"]
+            extended_valid_intervals = []
+            for t0, t1 in filtered:
+                mask = (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
+                subdf = df.loc[mask]
+                force_cols = [col for col in subdf.columns if force in col and "[" in col]
+                # Check if any relevant force column exceeds 150 N or 20% of body weight at any point in interval
+                force_valid = any(
+                    (subdf[col] > 150).any() or (subdf[col] > 20).any()
+                    for col in force_cols
+                )
+                if force_valid:
+                    extended_valid_intervals.append((t0, t1))
+            contact_times[force] = extended_valid_intervals
+
         file_data[side]["contact_time"] = contact_times
         # Ensure all forces in force_keys share the same contact intervals
         primary_force = "Fz" if "Fz" in contact_times else next(iter(contact_times), None)
@@ -173,7 +177,8 @@ def compute_interval_force_stats(file_data: Dict) -> None:
             "Fz": "Pz",
             "Mz": "PMz",
             "Fres_xyz": "Pxyz",
-            "Fres_yz": "Pyz"
+            "Fres_yz": "Pyz",
+            "FgR_sum": "Psum"
         }
 
         for i, (t0, t1) in enumerate(intervals):
@@ -186,20 +191,39 @@ def compute_interval_force_stats(file_data: Dict) -> None:
             }
 
             for force in force_map:
-                force_cols = [col for col in df.columns if force in col]
+                # Only select columns that have the force and contain a bracket (i.e., a single sensor/side/axis)
+                if force == "FgR_sum":
+                    # FgR_sum is a sum column, not per-side, but present in DataFrame
+                    force_cols = [col for col in df.columns if col.startswith("FgR_sum")]
+                else:
+                    force_cols = [col for col in df.columns if force in col and "[" in col]
                 if force_cols:
-                    series = segment[force_cols].sum(axis=1)
-                    impulse = float(np.trapz(np.abs(series) if force in ["Fx", "Mz"] else series, x=segment["Time [s]"]))
+                    force_cols = [force_cols[0]]  # use only the first match to avoid double side summing
+                    series = segment[force_cols[0]]
+                    if force in ["Fx", "Mz"]:
+                        impulse = float(np.trapz(np.abs(series), x=segment["Time [s]"]))
+                    else:
+                        impulse = float(np.trapz(series, x=segment["Time [s]"]))
+                    # Compute Rate of Force Development (maxROFD)
+                    time = segment["Time [s]"].values
+                    if len(time) >= 2:
+                        slope = np.gradient(series, time)
+                        maxROFD = np.max(slope)
+                    else:
+                        maxROFD = None
                     stats_entry[force] = {
                         "min": round(series.min(), 1),
                         "max": round(series.max(), 1),
                         "mean": round(series.mean(), 1),
-                        "impuls": round(impulse, 1)
+                        "impuls": round(impulse, 1),
+                        "maxROFD": round(maxROFD, 2) if maxROFD is not None else None
                     }
                     # Add impulse under new name as well
                     stats_entry[force_map[force]] = round(impulse, 1)
 
             interval_stats[f"I{i+1}"] = stats_entry
+            # Also save the raw time-force data for this interval
+            stats_entry["interval_data"] = segment.to_dict(orient="list")
 
         # Mittelwerte über alle Intervalle hinweg berechnen
         mean_metrics = {}
@@ -211,19 +235,26 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                 if force in ["interval_timing"]:
                     continue
                 # Only aggregate for force stats, not the separate impulse keys
-                if isinstance(metrics, dict):
+                if isinstance(metrics, dict) and "maxROFD" in metrics:
                     if force not in all_force_data:
-                        all_force_data[force] = {"min": [], "max": [], "mean": [], "impuls": []}
+                        all_force_data[force] = {"min": [], "max": [], "mean": [], "impuls": [], "maxROFD": []}
                     for key in ["min", "max", "mean", "impuls"]:
                         val = metrics.get(key)
                         if val is not None:
                             all_force_data[force][key].append(val)
+                    all_force_data[force]["maxROFD"].append(metrics["maxROFD"])
 
         for force, metric_lists in all_force_data.items():
-            mean_metrics[force] = {
-                key: round(np.mean(vals), 2) if vals else None
-                for key, vals in metric_lists.items()
-            }
+            mean_entry = {}
+            for key, vals in metric_lists.items():
+                if vals:
+                    mean_entry[key] = round(np.mean(vals), 2)
+            mean_metrics[force] = mean_entry
+
+        # Durchschnittliche Kontaktdauer ergänzen
+        durations = [entry["duration_s"] for entry in interval_stats.values() if "duration_s" in entry]
+        if durations:
+            mean_metrics["Contacttime"] = {"mean": round(np.mean(durations), 2)}
 
         interval_stats["Mean-Metrics"] = mean_metrics
         file_data[side]["intervals"] = interval_stats
@@ -396,150 +427,152 @@ def export_data_to_excel(file_data, fname, folder_path):
 
 # --- Hauptfunktion ---
 
-def load_lvm_data(folder_path, *, settings) -> Dict[str, Dict[str, Dict[str, Any]]]:
+def process_single_lvm_file(file_path, settings):
     """
-Lädt .lvm-Dateien aus dem angegebenen Verzeichnis und bereitet sie für die spätere Analyse auf.
-
-Abhängig vom Parameter 'usefilter' wird entweder das gefilterte oder das ungefilterte Dictionary erzeugt.
-Die Filterung erfolgt mit dem Savitzky-Golay-Filter (Fensterlänge, Polynomgrad einstellbar).
-
-Für jede .lvm-Datei wird ein Eintrag im Rückgabe-Dictionary erzeugt.
-Struktur des Rückgabewerts:
-  {
-      "Dateiname": {
-          "G1R": {
-              "data": DataFrame der rechten Seite (Spalten mit '1'),
-              "stats": Dictionary mit min/max Werten pro Spalte
-          },
-          "G2L": {
-              "data": DataFrame der linken Seite (Spalten mit '2'),
-              "stats": Dictionary mit min/max Werten pro Spalte
-          }
-      },
-      ...
-  }
-
-Zusätzlich werden folgende Spalten ergänzt:
-  - 'FgR_calc': Berechnete relative Griffkraft
-  - 'Fres_yz': Resultierende aus Fy und Fz
-  - 'φ_yz': Winkel zwischen Fres_yz und der Senkrechten (korrigiert um 40°)
-
-Rückgabe:
-  dict[str, dict[str, dict[str, Any]]]
-"""
+    Liest und verarbeitet eine einzelne .lvm-Datei. Gibt Dateiname, file_data und clean_df_trimmed zurück.
+    Die Funktion ist in logisch kommentierte Abschnitte gegliedert:
+      1. Metadaten einlesen
+      2. Rohdatenverarbeitung
+      3. Griffseitentrennung und Trimmung
+      4. Optional: Filterung
+      5. Strukturieren und Normieren
+      6. Resultierende berechnen
+    """
+    # === 1. Metadaten einlesen ===
     SVGwindowlength = settings.get("SVGwindowlength")
     SVGpolyorder = settings.get("SVGpolyorder")
     usefilter = settings.get("use_filter", False)
     normalizeByweight = settings.get("normalizeByweight", False)
-    save_plot = settings.get("save_plot", False)
     autotrim = settings.get("autotrim", True)
 
+    df = pd.read_csv(file_path, sep="\t", decimal=",", skiprows=0, header=21)
+    df.columns = df.columns.astype(str)
+    df = df.apply(pd.to_numeric, errors='coerce')
+    df = prepare_time_column(df, autotrim=autotrim)
+
+    file_name = os.path.splitext(os.path.basename(file_path))[0]
+    metadata = parse_metadata_from_filename(file_name)
+    athlete_name = metadata["athlete"]
+    kgclimber = metadata["weight"]
+    climberforce = kgclimber * 9.81
+    file_identity = metadata["identity"]
+
+    # === 2. Rohdatenverarbeitung ===
+    clean_df = clean_data(df) # remove X_Value, comments and U_data
+    clean_df = trim_low_force_periods(clean_df, threshold=10, min_duration=3, buffer=2)
+    clean_df = calc_fgr_sum(clean_df)
+
+    # === 3. Griffseitentrennung und Trimmung ===
+    g1r, g2l = split_grip_sides(clean_df)
+    global_start, global_end = get_trim_range_from_contact_times(g1r, g2l, autotrim)
+    g1r = g1r[(g1r["Time [s]"] >= global_start) & (g1r["Time [s]"] <= global_end)].reset_index(drop=True)
+    g2l = g2l[(g2l["Time [s]"] >= global_start) & (g2l["Time [s]"] <= global_end)].reset_index(drop=True)
+    min_len = min(len(g1r), len(g2l))
+    g1r = g1r.iloc[:min_len].reset_index(drop=True)
+    g2l = g2l.iloc[:min_len].reset_index(drop=True)
+
+    # === 4. Optional: Filterung ===
+    if usefilter:
+        g1r_filtered = apply_filter(g1r, SVGwindowlength, SVGpolyorder, mode='interp')
+        g2l_filtered = apply_filter(g2l, SVGwindowlength, SVGpolyorder, mode='interp')
+        clean_df = apply_filter(clean_df, SVGwindowlength, SVGpolyorder, mode='interp')
+        file_data = {
+            "G1R": {"data": g1r_filtered, "stats": get_min_max_values_per_column(g1r_filtered)},
+            "G2L": {"data": g2l_filtered, "stats": get_min_max_values_per_column(g2l_filtered)},
+        }
+    else:
+        file_data = {
+            "G1R": {"data": g1r, "stats": get_min_max_values_per_column(g1r)},
+            "G2L": {"data": g2l, "stats": get_min_max_values_per_column(g2l)},
+        }
+    clean_df_trimmed = clean_df[(clean_df["Time [s]"] >= global_start) & (clean_df["Time [s]"] <= global_end)].reset_index(drop=True)
+
+    # === 5. Strukturieren und Normieren ===
+    # Metadaten speichern
+    file_data["climberforce"] = climberforce
+    file_data["athletename"] = athlete_name
+    file_data["file_identity"] = file_identity
+    file_data["total_df"] = clean_df_trimmed
+
+    # Normierung und weitere Berechnungen pro Griffseite
+    for side in ["G1R", "G2L"]:
+        side_df = file_data[side]["data"]
+        if normalizeByweight and climberforce is not None and isinstance(climberforce, (int, float)):
+            normalize_forces_by_weight(side_df, climberforce)
+        file_data[side]["data"] = side_df
+
+    # === 6. Resultierende berechnen ===
+    # Berechne Fres_yz und φ_yz für beide Seiten
+    temp_dict = {file_name: file_data}
+    calc_resultant_fy_fz(temp_dict)
+    file_data = temp_dict[file_name]
+
+    return file_name, file_data, clean_df_trimmed
+
+
+def finalize_file_export(file_data, fname, folder_path, save_plot):
+    """
+    Führt die Export- und Berechnungslogik pro Datei durch.
+    """
+    force_keys = ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_yz"]
+    compute_contact_times(file_data, force_keys)
+    compute_interval_force_stats(file_data)
+    compute_impulses(file_data, force_keys)
+    export_data_to_excel(file_data, fname, folder_path)
+    # if save_plot:
+    #     export_impulse_data(file_data, fname, folder_path)
+
+
+def load_lvm_data(folder_path, *, settings, export=False) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    """
+    Lädt .lvm-Dateien aus dem angegebenen Verzeichnis und bereitet sie für die spätere Analyse auf.
+    """
+    save_plot = settings.get("save_plot", False)
     data_dict = {}
 
-    for file_path in [fp for fp in glob.glob(os.path.join(folder_path, "*.lvm")) if "MAX" not in os.path.basename(fp)]:
+    file_paths = sorted([fp for fp in glob.glob(os.path.join(folder_path, "*.lvm")) if "MAX" not in os.path.basename(fp)])
+    for file_path in file_paths:
         print(file_path)
+        file_name, file_data, clean_df_trimmed = process_single_lvm_file(file_path, settings)
+        data_dict[file_name] = file_data
+        # clean_df_trimmed is already included in file_data["total_df"]
+        if export:
+            # Export JSON
+            json_path = os.path.join(folder_path, "json", f"{file_name}.json")
+            os.makedirs(os.path.dirname(json_path), exist_ok=True)
+            with open(json_path, "w") as f:
+                json.dump(file_data, f, indent=2, default=str)
+            # Export Excel
+            export_data_to_excel(file_data, file_name, folder_path)
 
-        # Einlesen und Grunddatenaufbereitung
-        df = pd.read_csv(file_path, sep="\t", decimal=",", skiprows=0, header=21)
-        df.columns = df.columns.astype(str)
-        df = df.apply(pd.to_numeric, errors='coerce')
-
-        df = prepare_time_column(df, autotrim=autotrim)
-
-        # Metadaten extrahieren
-        file_name = os.path.splitext(os.path.basename(file_path))[0]
-        metadata = parse_metadata_from_filename(file_name)
-        athlete_name = metadata["athlete"]
-        kgclimber = metadata["weight"]
-        climberforce = kgclimber * 9.81
-        file_identity = metadata["identity"]
-
-        # Datenbereinigung und Filterung
-        clean_df = clean_data(df)
-        clean_df = trim_low_force_periods(clean_df, threshold=10, min_duration=3, buffer=2)
-
-        # Aufteilung in Griffseiten
-        g1r, g2l = split_grip_sides(clean_df)
-
-        # Gemeinsames Zeitintervall für beide Griffe bestimmen
-        start_g1r, end_g1r = get_flank_time_range(g1r)
-        print("start_g1r, end_g1r", start_g1r, end_g1r)
-        start_g2l, end_g2l = get_flank_time_range(g2l)
-        print("start_g2l, end_g2l", start_g2l, end_g2l)
-        global_start = min(start_g1r, start_g2l)
-        print("global_start", global_start)
-        global_end = max(end_g1r, end_g2l)
-        print("global_end", global_end)
-
-        # Trimme die Datenframes auf den gemeinsamen Zeitbereich
-        g1r = g1r[(g1r["Time [s]"] >= global_start) & (g1r["Time [s]"] <= global_end)].reset_index(drop=True)
-        g2l = g2l[(g2l["Time [s]"] >= global_start) & (g2l["Time [s]"] <= global_end)].reset_index(drop=True)
-
-        # Angleichung der Längen beider Seiten nach dem Trimmen
-        min_len = min(len(g1r), len(g2l))
-        g1r = g1r.iloc[:min_len].reset_index(drop=True)
-        g2l = g2l.iloc[:min_len].reset_index(drop=True)
-
-        # Filterung falls gewünscht
-        if usefilter:
-            g1r_filtered = apply_filter(g1r, SVGwindowlength, SVGpolyorder, mode='interp')
-            g2l_filtered = apply_filter(g2l, SVGwindowlength, SVGpolyorder, mode='interp')
-            data_dict[file_name] = {
-                "G1R": {"data": g1r_filtered, "stats": get_min_max_values_per_column(g1r_filtered)},
-                "G2L": {"data": g2l_filtered, "stats": get_min_max_values_per_column(g2l_filtered)},
-            }
-        else:
-            data_dict[file_name] = {
-                "G1R": {"data": g1r, "stats": get_min_max_values_per_column(g1r)},
-                "G2L": {"data": g2l, "stats": get_min_max_values_per_column(g2l)},
-            }
-
-        # Metadaten speichern
-        data_dict[file_name]["climberforce"] = climberforce
-        data_dict[file_name]["athletename"] = athlete_name
-        data_dict[file_name]["file_identity"] = file_identity
-
-        # Normierung und weitere Berechnungen pro Griffseite
-        for side in ["G1R", "G2L"]:
-            df = data_dict[file_name][side]["data"]
-
-            # Normierung auf Körpergewicht
-            if normalizeByweight and climberforce is not None and isinstance(climberforce, (int, float)):
-                normalize_forces_by_weight(df, climberforce)
-
-        # Berechne Fres_yz und φ_yz für beide Seiten
-        calc_resultant_fy_fz(data_dict)
-
-    # Berechne und speichere die Aktivitäts-Kontaktzeiten und Impulse für jede Kraft pro Griff
-    force_keys = ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_yz"]
+    # Export und finale Berechnungen pro Datei
     for fname, file_data in data_dict.items():
-        compute_contact_times(file_data, force_keys)
-        compute_interval_force_stats(file_data)
-        compute_impulses(file_data, force_keys)
-        export_data_to_excel(file_data, fname, folder_path)
-      #  if save_plot:
-          #  export_impulse_data(file_data, fname, folder_path)
-           
-    
+         finalize_file_export(file_data, fname, folder_path, save_plot)
 
-    # Kopie ohne "data"-Einträge
+    # Kopie mit zusätzlichem 'data'-Eintrag
     exportable_dict = {}
     for fname, content in data_dict.items():
         exportable_dict[fname] = {}
         for key, val in content.items():
             if key in ["G1R", "G2L"]:
-                exportable_dict[fname][key] = {k: v for k, v in val.items() if k != "data"}
-            else:
+                exportable_dict[fname][key] = {
+                    **{k: v for k, v in val.items() if k != "data"},
+                    "data": val["data"].to_dict(orient="list")
+                }
+            elif key != "total_df":
                 exportable_dict[fname][key] = val
-
-    # Speicherpfad definieren
-    output_path = os.path.join(folder_path, "summary_metadata.json")
-    try:
-        with open(output_path, "w") as f:
-            json.dump(exportable_dict, f, indent=2)
-        print(f"Zusammenfassung gespeichert unter: {output_path}")
-    except Exception as e:
-        print(f"Fehler beim Speichern der JSON-Datei: {e}")
+    if export:
+        output_path = os.path.join(folder_path, "summary_metadata.json")
+        try:
+            with open(output_path, "w") as f:
+                json.dump(exportable_dict, f, indent=2)
+            print(f"Zusammenfassung gespeichert unter: {output_path}")
+        except Exception as e:
+            print(f"Fehler beim Speichern der JSON-Datei: {e}")
+    print("\n++++++++++++++++++++++++++++++++++")
+    for filename in data_dict:
+        print(f"\n--- {filename} ---")
+        print(list(data_dict[filename].keys()))
 
     return data_dict if data_dict else None
 
@@ -549,7 +582,36 @@ def normalize_forces_by_weight(df, climberforce):
     """
     Skaliert die Kräfte Fy, Fz, Fx, Mz in Prozent des Körpergewichts.
     """
-    for force_type in ["Fy", "Fz", "Fx", "Mz"]:
-        force_cols = [col for col in df.columns if force_type in col]
-        for col in force_cols:
-            df[col] = df[col] / climberforce * 100
+# Exportiere Original und Normalisiert nebeneinander in eine Excel-Datei
+    try:
+        original_df = df.copy()
+        for force_type in ["Fy", "Fz", "Fx", "Mz"]:
+            force_cols = [col for col in df.columns if force_type in col]
+            for col in force_cols:
+                df[col] = (df[col] / climberforce) * 100
+                new_col = col.replace("[N]", "[%]")
+                df.rename(columns={col: new_col}, inplace=True)
+       # export_path = "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/pipeline/original_vs_normalized_debug.xlsx"
+       # with pd.ExcelWriter(export_path) as writer:
+        #    original_df.to_excel(writer, sheet_name="Original", index=False)
+         #   df.to_excel(writer, sheet_name="Normalized", index=False)
+        #print(f"[normalize_forces_by_weight] Debug-Export erfolgreich: {export_path}")
+    except Exception as e:
+        print(f"[normalize_forces_by_weight] Fehler beim Export: {e}")
+
+
+    
+    
+
+# --- Neue Funktion: Summenspalte FgR_sum [%] ---
+def calc_fgr_sum(df):
+    """
+    Fügt dem übergebenen DataFrame eine neue Spalte 'FgR_sum [%]' hinzu.
+    Diese Spalte enthält die Zeilensumme aus 'FgR_1 [%]' und 'FgR_2 [%]', sofern beide vorhanden sind.
+    """
+    fgr1_col = next((col for col in df.columns if "FgR_1" in col), None)
+    fgr2_col = next((col for col in df.columns if "FgR_2" in col), None)
+
+    if fgr1_col and fgr2_col:
+        df["FgR_sum [%]"] = df[fgr1_col] + df[fgr2_col]
+    return df

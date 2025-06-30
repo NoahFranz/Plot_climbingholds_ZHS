@@ -13,24 +13,6 @@ def clean_data(df):
     return df_clean
 
 
-def get_min_max_values(df):
-    """
-    Bestimmt den  minimalen und maximalen Wert eines datasets (außer 'Time [s]') aus dem DataFrame.
-    """
-    numeric_cols = [col for col in df.columns if col != "Time [s]"]
-    min_val = df[numeric_cols].min().min()
-    max_val = df[numeric_cols].max().max()
-    return min_val, max_val
-
-def split_data(df):
-    """
-    Teilt den DataFrame in zwei Teile:
-      - griff_left: Enthält 'Time [s]' und alle Spalten, die eine '2' im Namen haben
-      - griff_right: Enthält 'Time [s]' und alle Spalten, die eine '1' im Namen haben
-    """
-    griff_left = df[["Time [s]"] + [col for col in df.columns if "2" in col]]
-    griff_right = df[["Time [s]"] + [col for col in df.columns if "1" in col]]
-    return griff_left, griff_right
 
 def get_min_max_values_per_column(df):
     """
@@ -52,7 +34,7 @@ def compute_global_ylimits_for_plots(plot_dict, forces_g1, forces_g2, margin=1.2
     """
     global_y_limits = {}
 
-    # Initialisiere max/min für G1 und G2 mit extremen Werten
+    # Initialisiere max/min für G1R und G2L mit extremen Werten
     cols_g2 = [col for col in plot_dict["G2L"]["data"].columns if any(force in col for force in forces_g2)]
     min_g2 = plot_dict["G2L"]["data"][cols_g2].min().min()
     max_g2 = plot_dict["G2L"]["data"][cols_g2].max().max()
@@ -88,7 +70,7 @@ def get_force_suffix(forces_to_plot):
     all_forces = {"Fx", "Fy", "Fz", "Mz", "FgR", "FgR_calc"}
 
     selected_forces = set()
-    for side in ["G1", "G2"]:
+    for side in ["G1R", "G2L"]:
         for force, active in forces_to_plot.get(side, {}).items():
             if force != "all" and active:
                 selected_forces.add(force)
@@ -136,8 +118,8 @@ def prepare_data(current_dict, forces_to_plot, cutoff):
                     trimmed_df = trim_dataframe_by_time(df, start_seconds=cutoff["start"], end_seconds=cutoff["end"])
                     current_dict[filename][hold]["data"] = trimmed_df
 
-    forces_g1 = [k for k, v in forces_to_plot["G1"].items() if k != "all" and v]
-    forces_g2 = [k for k, v in forces_to_plot["G2"].items() if k != "all" and v]
+    forces_g1 = [k for k, v in forces_to_plot["G1R"].items() if k != "all" and v]
+    forces_g2 = [k for k, v in forces_to_plot["G2L"].items() if k != "all" and v]
     return current_dict, forces_g1, forces_g2
 
 def print_current_dict_summary(current_dict):
@@ -161,44 +143,6 @@ def print_current_dict_summary(current_dict):
                 print("    global_y_limits: Nicht gesetzt")
 
 
-def _find_active_segment(time: pd.Series, mask: pd.Series, min_duration: float) -> Optional[Tuple[float, float]]:
-    """
-    Hilfsfunktion: Findet das erste Segment, in dem mask=True für mindestens min_duration Sekunden.
-    Gibt (t_start, t_end) zurück oder None.
-    """
-    # Kennzeichne Gruppen zusammenhängender True/False-Werte
-    grp = (mask != mask.shift()).cumsum()
-    # Erstelle DataFrame mit explizit benannter Mask-Spalte
-    df_seg = pd.concat([
-        time.rename(time.name),
-        mask.rename("mask"),
-        grp.rename("grp")
-    ], axis=1)
-    # Suche das erste True-Segment mit ausreichender Dauer
-    for _, g in df_seg.groupby("grp"):
-        if g["mask"].iloc[0]:
-            duration = g[time.name].iloc[-1] - g[time.name].iloc[0]
-            if duration >= min_duration:
-                return (g[time.name].iloc[0], g[time.name].iloc[-1])
-    return None
-def _find_last_active_segment(time: pd.Series,
-                              mask: pd.Series,
-                              min_duration: float) -> Optional[Tuple[float, float]]:
-    """
-    Findet das letzte Segment, in dem mask==True für mindestens min_duration Sekunden.
-    """
-    # Gruppen für zusammenhängende True/False
-    grp = (mask != mask.shift()).cumsum()
-    last_valid = None
-    # iteriere über Gruppen
-    df = pd.concat([time, mask.rename("m"), grp.rename("grp")], axis=1)
-    for _, g in df.groupby("grp"):
-        if g["m"].iloc[0]:
-            dur = g[time.name].iloc[-1] - g[time.name].iloc[0]
-            if dur >= min_duration:
-                last_valid = (g[time.name].iloc[0], g[time.name].iloc[-1])
-    return last_valid
-
 def get_force_contact_times(
     df: pd.DataFrame,
     forces: List[str],
@@ -213,14 +157,14 @@ def get_force_contact_times(
     end_threshold: Optional[float] = None
 ) -> Dict[str, Tuple[float, float]]:
     """
-    Bestimmt Kontaktzeiten anhand von 'Fz' im DataFrame.
-    Nur die Kraft 'Fz' wird zur Detektion der Kontaktzeiten verwendet.
-    Für alle anderen Kräfte werden exakt dieselben Zeitabschnitte (Kontaktzeiten) verwendet wie für 'Fz'.
+    Bestimmt Kontaktzeiten anhand von 'Fz', 'Fy' im DataFrame.
+    Nur die Kraft 'Fz', 'Fy'  wird zur Detektion der Kontaktzeiten verwendet.
+    Für alle anderen Kräfte werden exakt dieselben Zeitabschnitte (Kontaktzeiten) verwendet wie für 'Fz','Fy' .
     
     Für jede Kontaktzeit gilt zusätzlich:
-      - Das Intervall beginnt, wenn 'Fz' für mindestens start_dur Sekunden oberhalb des Startschwellwertes liegt.
-      - Das Intervall endet, wenn 'Fz' für mindestens end_dur Sekunden unterhalb des Endschwellwertes bleibt.
-      - Innerhalb des Intervalls muss 'Fz' mindestens einmal ≥ 5 betragen.
+      - Das Intervall beginnt, wenn 'Fz' oder 'Fy'  für mindestens start_dur Sekunden oberhalb des Startschwellwertes liegt.
+      - Das Intervall endet, wenn 'Fz' oder 'Fy'  für mindestens end_dur Sekunden unterhalb des Endschwellwertes bleibt.
+      - Innerhalb des Intervalls muss 'Fz','Fy'  mindestens einmal ≥ 5 betragen.
 
     Rückgabe:
       { 'Fz': [(t0, t1), ...], 'Fx': [(t0, t1), ...], ... }
@@ -232,6 +176,7 @@ def get_force_contact_times(
     forces_detect = {"Fz", "Fy"}
     contact_time = {}
     time = df[time_col]
+    
     # If a single threshold is given, override only the start threshold
     if threshold is not None:
         default_start_threshold = threshold
@@ -265,25 +210,25 @@ def get_force_contact_times(
 
     # Find all rising-edge indices in Fz where an interval could start
     mask_start_fz = mask_start_dict.get("Fz", pd.Series([False]*len(df), index=df.index))
-    mask_end_fz = mask_end_dict.get("Fz", pd.Series([False]*len(df), index=df.index))
+    # Determine interval ends using Fy only
+    mask_end_fy = mask_end_dict.get("Fy", pd.Series([False]*len(df), index=df.index))
     start_edges_fz = mask_start_fz & ~mask_start_fz.shift(fill_value=False)
     start_idxs_fz = time.index[start_edges_fz]
 
     force_intervals = []
     for fz_start_idx in start_idxs_fz:
         t0_fz = time.loc[fz_start_idx]
-        # Only consider end after t0
-        mask_end_after_fz = mask_end_fz & (time >= t0_fz)
-        if mask_end_after_fz.any():
-            end_idx_fz = mask_end_after_fz[mask_end_after_fz].index[0]
+        # Only consider end after t0, but using Fy mask for interval end
+        mask_end_after_fy = mask_end_fy & (time >= t0_fz)
+        if mask_end_after_fy.any():
+            end_idx_fz = mask_end_after_fy[mask_end_after_fy].index[0]
             t1_fz = time.loc[end_idx_fz]
         else:
+            end_idx_fz = time.index[-1]
             t1_fz = time.iloc[-1]
 
-        # Compute corresponding start and end indices for Fy
+        # Compute corresponding start index for Fy (could keep previous logic if needed)
         mask_start_fy = mask_start_dict.get("Fy", pd.Series([False]*len(df), index=df.index))
-        mask_end_fy = mask_end_dict.get("Fy", pd.Series([False]*len(df), index=df.index))
-        # Find first index >= t0_fz where Fy mask_start is True
         mask_start_after_fy = mask_start_fy & (time >= t0_fz)
         if mask_start_after_fy.any():
             fy_start_idx = mask_start_after_fy[mask_start_after_fy].index[0]
@@ -291,23 +236,15 @@ def get_force_contact_times(
         else:
             t0_fy = t0_fz
             fy_start_idx = fz_start_idx
-        # Find first index >= t0_fz where Fy mask_end is True
-        mask_end_after_fy = mask_end_fy & (time >= t0_fz)
-        if mask_end_after_fy.any():
-            fy_end_idx = mask_end_after_fy[mask_end_after_fy].index[0]
-            t1_fy = time.loc[fy_end_idx]
-        else:
-            t1_fy = t1_fz
-            fy_end_idx = end_idx_fz
 
-        # Use min of Fz and Fy for start, max for end
+        # Use min of Fz and Fy for start, but end always determined by Fy
         final_start_idx = min(fz_start_idx, fy_start_idx)
-        final_end_idx = max(end_idx_fz, fy_end_idx)
+        final_end_idx = end_idx_fz
         t0 = time.loc[final_start_idx]
         t1 = time.loc[final_end_idx]
 
-        # Accept only intervals where duration ≥ end_dur
-        if (t1 - t0) >= end_dur:
+        # Accept only intervals where duration ≥ end_dur and duration > 0.9
+        if (t1 - t0) >= end_dur and (t1 - t0) > 0.9:
             # Zusatzbedingung: min. einmal Fz >= 5 innerhalb des Intervalls
             Fz_cols = [col for col in df.columns if "Fz" in col]
             mask_interval = (df[time_col] >= t0) & (df[time_col] <= t1)
@@ -397,7 +334,7 @@ def get_unique_selected_forces(forces_to_plot: Dict[str, Dict[str, bool]]) -> Li
     auf True gesetzt sind. Ignoriert den Schlüssel 'all'.
 
     Args:
-        forces_to_plot (Dict[str, Dict[str, bool]]): Dictionary mit Griffen 'G1' und 'G2',
+        forces_to_plot (Dict[str, Dict[str, bool]]): Dictionary mit Griffen 'G1R' und 'G2L',
             die jeweils eine Dict von Kraftnamen zu bools enthalten.
 
     Returns:

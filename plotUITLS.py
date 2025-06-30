@@ -7,6 +7,30 @@ import numpy as np
 
 DEFAULT_FIGSIZE = (6.3, 8)
 
+def apply_latex_style():
+    """
+    Applies LaTeX styling to matplotlib plots for consistent, publication-quality output.
+    """
+    plt.rcParams.update({
+        "text.usetex": True,
+        "font.family": "serif",
+        "font.serif": ["Computer Modern Roman"],
+        "font.size": 10,
+        "axes.labelsize": 10,
+        "axes.titlesize": 12,
+        "legend.fontsize": 8,
+        "xtick.labelsize": 8,
+        "ytick.labelsize": 8,
+        "figure.dpi": 100,
+        "axes.linewidth": 1,
+        "lines.linewidth": 1,
+        "legend.frameon": True,
+        "legend.framealpha": 0.9,
+        "legend.fancybox": True,
+        "legend.edgecolor": "black",
+        "grid.alpha": 0.3,
+    })
+
 def clean_label(label):
     """
     Entfernt standardisierte Suffixe und Einheiten aus einem Spaltennamen.
@@ -34,6 +58,8 @@ def apply_default_plot_style(fig, normalizebyweight=False):
     Wendet Standardwerte für Schriftgröße, Schriftart und andere Stiloptionen auf die gesamte Figure an.
     Entfernt doppelte Schleifen und hält y-Label-Logik zentral.
     """
+   # apply_latex_style()
+
     for ax in fig.get_axes():
         # Grundstil
         ax.tick_params(labelsize=10)
@@ -41,7 +67,7 @@ def apply_default_plot_style(fig, normalizebyweight=False):
         ax.xaxis.label.set_fontsize(11)
         ax.yaxis.label.set_fontsize(11)
         for label in ax.get_xticklabels() + ax.get_yticklabels():
-            label.set_fontname("Arial")
+            label.set_fontname("Serif")
             label.set_fontsize(10)
 
         # Dynamisches y-Label
@@ -95,7 +121,11 @@ def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle=
         #    ax.set_title("")
         full_path = os.path.join(save_folder, safe_name)
         fig.savefig(full_path)
+        svg_name = safe_name.replace(".png", ".svg")
+        full_path_svg = os.path.join(save_folder, svg_name)
+        fig.savefig(full_path_svg)
         print(f"Plot gespeichert unter: {full_path}")
+        print(f"Plot gespeichert unter: {full_path_svg}")
     else:
         fig.suptitle(safe_name, fontsize=14)
         fig._suptitle = safe_name
@@ -152,28 +182,6 @@ def combine_legends(ax, secondary_ax=None, loc="upper left", ncol=5):
     if handles:
         ax.legend(handles, labels, loc=loc, ncol=ncol)
 
-def plot_mz_data(ax, hold_data):
-    """
-    Plottet die Mz-Daten auf der übergebenen Achse und gibt die Legendenhandles zurück.
-    """
-    time_data = hold_data["Time [s]"]
-    mz_cols = [col for col in hold_data.columns if "Mz" in col]
-    plot_mz_on_secondary_axis(ax, time_data, hold_data, mz_cols)
-    return ax.get_legend_handles_labels()
-
-def only_fgr_in_plot(forces):
-    """
-    Prüft, ob ausschließlich 'FgR' oder 'FgR_calc' in der Liste der Kräfte enthalten ist.
-    Wenn ja, kann z. B. die y-Achsenbeschriftung angepasst werden.
-    """
-    return all(force in {"FgR", "FgR_calc"} for force in forces) if forces else False
-
-def only_phi_in_plot(forces):
-    """
-    Prüft, ob ausschließlich 'φ_yz' in der Liste der Kräfte enthalten ist.
-    """
-    return all(force == "φ_yz" for force in forces) if forces else False
-
 def set_dynamic_ylabel(ax, normalizebyweight=False):
     """
     Setzt den y-Achsentitel je nach Dateninhalt.
@@ -191,37 +199,7 @@ def set_dynamic_ylabel(ax, normalizebyweight=False):
         ax.set_ylabel("F [%]")
     else:
         ax.set_ylabel("F [N]")
-def export_figure_data_as_mat(fig, filename="figure_export.mat"):
-    """
-    Exportiert die Daten aller Linien in der übergebenen Matplotlib-Figure als .mat-Datei,
-    sodass sie in MATLAB importiert werden können.
 
-    Jede Achse wird separat benannt, jede Linie bekommt ihre x- und y-Werte und ihr Label.
-
-    Parameter:
-        fig : matplotlib.figure.Figure
-            Die zu exportierende Figure.
-        filename : str
-            Name der Zieldatei (.mat)
-    """
-    export_data = {}
-
-    for i, ax in enumerate(fig.get_axes()):
-        lines = ax.get_lines()
-        for j, line in enumerate(lines):
-            label = line.get_label()
-            key_base = f"ax{i+1}_line{j+1}"
-            export_data[f"{key_base}_x"] = line.get_xdata()
-            export_data[f"{key_base}_y"] = line.get_ydata()
-            export_data[f"{key_base}_label"] = label
-
-    savemat(filename, export_data)
-    print(f"Figure-Daten als .mat-Datei gespeichert: {filename}")
-
-    def get_first_value(lst):
-        if isinstance(lst, list) and len(lst) > 0:
-            return lst[0]
-        return 0
 
 
 def find_max_impulse_interval_length(impulses, intervals):
@@ -279,4 +257,3 @@ def map_force_to_axis(force: str) -> str:
     # Normalisiere Eingabe auf Groß-/Kleinschreibung
     key = force.strip().capitalize()
     return mapping.get(key, "")
-
