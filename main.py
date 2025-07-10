@@ -6,6 +6,7 @@ import os
 import datetime
 import copy
 import glob
+from additional_calculations import compute_hausdorff_dimensions_all_axes
 
 
 # Export run settings to a .txt file
@@ -89,7 +90,10 @@ def main():
 
     folder_list = [
       #  "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Moment",
-      "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability"
+    #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/068-static-dynamic",
+    #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/069-static",
+    "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/070-dynamic",
+     # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability"
        # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Test-Rest",
        #     "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2",
        # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/pipeline",

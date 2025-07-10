@@ -10,6 +10,7 @@ from scipy.signal import savgol_filter
 
 from utils import clean_data, get_min_max_values_per_column
 from utils import get_force_contact_times, compute_impulses_per_contact, trim_low_force_periods
+from additional_calculations import compute_hausdorff_dimensions_all_axes, calc_hausdorff_dimension_for_single_signal
 
 
 # --- Neue Hilfsfunktion: Zeitbereich aus Kontaktzeiten bestimmen ---
@@ -211,13 +212,16 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                         maxROFD = np.max(slope)
                     else:
                         maxROFD = None
-                    stats_entry[force] = {
+                    force_dict = {
                         "min": round(series.min(), 1),
                         "max": round(series.max(), 1),
                         "mean": round(series.mean(), 1),
                         "impuls": round(impulse, 1),
-                        "maxROFD": round(maxROFD, 2) if maxROFD is not None else None
+                        "maxROFD": round(maxROFD, 2) if maxROFD is not None else None,
+                        "hausdorff": calc_hausdorff_dimension_for_single_signal(time, series)  # Placeholder for Hausdorff dimension
                     }
+
+                    stats_entry[force] = force_dict
                     # Add impulse under new name as well
                     stats_entry[force_map[force]] = round(impulse, 1)
 
@@ -235,14 +239,13 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                 if force in ["interval_timing"]:
                     continue
                 # Only aggregate for force stats, not the separate impulse keys
-                if isinstance(metrics, dict) and "maxROFD" in metrics:
+                if isinstance(metrics, dict) and any(k in metrics for k in ["maxROFD", "hausdorff"]):
                     if force not in all_force_data:
-                        all_force_data[force] = {"min": [], "max": [], "mean": [], "impuls": [], "maxROFD": []}
-                    for key in ["min", "max", "mean", "impuls"]:
+                        all_force_data[force] = {"min": [], "max": [], "mean": [], "impuls": [], "maxROFD": [], "hausdorff": []}
+                    for key in ["min", "max", "mean", "impuls", "maxROFD", "hausdorff"]:
                         val = metrics.get(key)
                         if val is not None:
                             all_force_data[force][key].append(val)
-                    all_force_data[force]["maxROFD"].append(metrics["maxROFD"])
 
         for force, metric_lists in all_force_data.items():
             mean_entry = {}
@@ -250,6 +253,19 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                 if vals:
                     mean_entry[key] = round(np.mean(vals), 2)
             mean_metrics[force] = mean_entry
+
+    # # Mittelwert der Hausdorff-Dimensionen berechnen
+    # hausdorff_means = {}
+    # for entry in interval_stats.values():
+    #     for key, value in entry.items():
+    #         if key.startswith("hausdorff_") and isinstance(value, (float, int)):
+    #             if key not in hausdorff_means:
+    #                 hausdorff_means[key] = []
+    #             hausdorff_means[key].append(value)
+
+    # for key, values in hausdorff_means.items():
+    #     if values:
+    #         mean_metrics[key] = {"mean": round(np.mean(values), 4)}
 
         # Durchschnittliche Kontaktdauer ergänzen
         durations = [entry["duration_s"] for entry in interval_stats.values() if "duration_s" in entry]
@@ -363,7 +379,7 @@ def export_impulse_data(file_data, fname, folder_path):
 def export_data_to_excel(file_data, fname, folder_path):
     excel_folder = os.path.join(folder_path, "excel")
     os.makedirs(excel_folder, exist_ok=True)
-    excel_path = os.path.join(excel_folder, f"{fname}_summary.xlsx")
+    excel_path = os.path.join(excel_folder, f"{fname}_Interval_summary.xlsx")
     with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
         # Metadaten
         meta_df = pd.DataFrame({
@@ -518,6 +534,7 @@ def finalize_file_export(file_data, fname, folder_path, save_plot):
     compute_contact_times(file_data, force_keys)
     compute_interval_force_stats(file_data)
     compute_impulses(file_data, force_keys)
+  #  compute_hausdorff_dimensions_all_axes(file_data)
     export_data_to_excel(file_data, fname, folder_path)
     # if save_plot:
     #     export_impulse_data(file_data, fname, folder_path)
