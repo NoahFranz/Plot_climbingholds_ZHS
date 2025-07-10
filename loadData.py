@@ -68,7 +68,8 @@ def parse_metadata_from_filename(file_name):
     result = {
         "athlete": "Unbekannt",
         "weight": 100,
-        "identity": "Unknown"
+        "identity": "Unknown",
+        "file_number": "000",
     }
     if match := re.search(r"_(\d+)kg", file_name):
         result["weight"] = int(match.group(1))
@@ -76,6 +77,9 @@ def parse_metadata_from_filename(file_name):
         result["athlete"] = match.group(1)
     if match := re.search(r"^(.+?)_\d+kg", file_name):
         result["identity"] = match.group(1)
+    # Extract 3-digit file number before first dash
+    if match := re.search(r"(\d{3})(?=-)", file_name):
+        result["file_number"] = match.group(1)
     return result
 
 def split_grip_sides(df):
@@ -254,18 +258,7 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                     mean_entry[key] = round(np.mean(vals), 2)
             mean_metrics[force] = mean_entry
 
-    # # Mittelwert der Hausdorff-Dimensionen berechnen
-    # hausdorff_means = {}
-    # for entry in interval_stats.values():
-    #     for key, value in entry.items():
-    #         if key.startswith("hausdorff_") and isinstance(value, (float, int)):
-    #             if key not in hausdorff_means:
-    #                 hausdorff_means[key] = []
-    #             hausdorff_means[key].append(value)
-
-    # for key, values in hausdorff_means.items():
-    #     if values:
-    #         mean_metrics[key] = {"mean": round(np.mean(values), 4)}
+ 
 
         # Durchschnittliche Kontaktdauer ergänzen
         durations = [entry["duration_s"] for entry in interval_stats.values() if "duration_s" in entry]
@@ -533,6 +526,7 @@ def finalize_file_export(file_data, fname, folder_path, save_plot):
     force_keys = ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_yz"]
     compute_contact_times(file_data, force_keys)
     compute_interval_force_stats(file_data)
+    plot_hausdorff_intervals(file_data, folder_path, fname)
     compute_impulses(file_data, force_keys)
   #  compute_hausdorff_dimensions_all_axes(file_data)
     export_data_to_excel(file_data, fname, folder_path)
@@ -632,3 +626,44 @@ def calc_fgr_sum(df):
     if fgr1_col and fgr2_col:
         df["FgR_sum [%]"] = df[fgr1_col] + df[fgr2_col]
     return df
+
+
+# --- Plotting: Hausdorff intervals ---
+import matplotlib.pyplot as plt
+import os
+
+def plot_hausdorff_intervals(file_data: Dict[str, Any], folder_path: str, fname: str) -> None:
+    """
+    Plots force-time curves for each interval and force axis with Hausdorff values annotated.
+    Saves plots as PNG files in a 'plots' subfolder.
+    """
+    plot_dir = os.path.join(folder_path, "plots")
+    os.makedirs(plot_dir, exist_ok=True)
+
+    for side in ["G1R", "G2L"]:
+        intervals = file_data.get(side, {}).get("intervals", {})
+        for int_key, stats in intervals.items():
+            if int_key == "Mean-Metrics":
+                continue
+            interval_data = stats.get("interval_data", {})
+            time = interval_data.get("Time [s]", [])
+            if not time:
+                continue
+            for force in ["Fx", "Fy", "Fz", "Mz", "Fres_yz", "Fres_xyz"]:
+                # Find the correct key containing the force and a bracket (like "[N]")
+                matching_keys = [k for k in interval_data if force in k]
+                force_series = interval_data.get(matching_keys[0], []) if matching_keys else []
+                hausdorff = stats.get(force, {}).get("hausdorff", None)
+                if force_series and hausdorff is not None:
+                    plt.figure()
+                    plt.plot(time, force_series, label=f"{force}")
+                    plt.xlabel("Time [s]")
+                    plt.ylabel(force)
+                    plt.title(f"{fname} | {side} | {int_key} | {force} | HD = {hausdorff:.3f}")
+                    plt.grid(True)
+                    file_number = file_data.get("file_number", "000")
+                    force_plot_dir = os.path.join(plot_dir, f"{file_number}_{side}", force)
+                    os.makedirs(force_plot_dir, exist_ok=True)
+                    filename = f"{side}_{int_key}_{force}_HD.png".replace(" ", "_")
+                    plt.savefig(os.path.join(force_plot_dir, filename))
+                    plt.close()
