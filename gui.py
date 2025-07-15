@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog
+import config
 
 
 
@@ -161,7 +162,7 @@ def run_gui():
     metric_label = tk.Label(bar_frame, text="Metric:")
     metric_label.pack(anchor="w")
     metric_var = tk.StringVar(value="impuls")
-    metric_dropdown = tk.OptionMenu(bar_frame, metric_var, "impuls", "mean", "max", "maxROFD", "contact time")
+    metric_dropdown = tk.OptionMenu(bar_frame, metric_var, "impuls", "mean", "max", "maxROFD", "contact time", "hausdorff")
     metric_dropdown.pack(anchor="w", padx=5)
 
     # Collapsible Signal-/Daten-Options
@@ -218,6 +219,18 @@ def run_gui():
     export_data_var = tk.BooleanVar(value=False)
     export_data_checkbox = tk.Checkbutton(submit_frame, text="Export Calculations", variable=export_data_var)
     export_data_checkbox.pack(side="left", padx=10)
+
+    # --- Export Hausdof plots option ---
+    config.create_hausdorff_plots = False  # Default
+
+    hausdorff_plot_var = tk.BooleanVar(value=False)
+    hausdorff_plot_checkbox = tk.Checkbutton(submit_frame, text="Export HD-plots", variable=hausdorff_plot_var)
+    hausdorff_plot_checkbox.pack(side="left", padx=10)
+
+    def update_hausdorff_setting(*args):
+        config.create_hausdorff_plots = hausdorff_plot_var.get()
+
+    hausdorff_plot_var.trace_add("write", update_hausdorff_setting)
 
     # Option zum Erstellen der Plots
     create_plots_var = tk.BooleanVar(value=True)
@@ -374,6 +387,13 @@ def run_gui():
     suffix_var = tk.StringVar()
     suffix_entry = tk.Entry(suffix_frame, textvariable=suffix_var)
     suffix_entry.pack(fill="x", padx=5, pady=5)
+
+    # Eingabe für zu überspringende Intervalle
+    intervals_frame = tk.LabelFrame(scrollable_frame, text="Intervals to Skip (e.g. 2,3)")
+    intervals_frame.pack(pady=5, padx=10, fill="x")
+    intervals_var = tk.StringVar()
+    intervals_entry = tk.Entry(intervals_frame, textvariable=intervals_var)
+    intervals_entry.pack(fill="x", padx=5, pady=5)
     
     # Griff-Options
     griff_frame = tk.LabelFrame(scrollable_frame, text="Hold")
@@ -593,6 +613,12 @@ def run_gui():
     cancelled = {"status": False}
 
     def submit():
+        # Parse intervals to skip and save to config
+        try:
+            config.invalid_intervals_list = [int(x.strip()) for x in intervals_var.get().split(",") if x.strip().isdigit()]
+        except Exception as e:
+            print(f"Could not parse invalid intervals: {e}")
+            config.invalid_intervals_list = []
         root.quit()
         root.destroy()
 
