@@ -4,9 +4,11 @@ from utils import *
 from plotdata import *
 import os
 import datetime
+import config
 import copy
 import glob
 from additional_calculations import compute_hausdorff_dimensions_all_axes
+
 
 
 # Export run settings to a .txt file
@@ -50,13 +52,21 @@ def export_plot_settings(settings, holds_to_plot, forces_to_plot, filters, file_
 def main():
     
     os.system('cls' if os.name == 'nt' else 'clear')
+    import datetime
+    print("Script executed at:", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     result = run_gui()
     if result is None:
         print("GUI abgebrochen.")
         return
-    plot_settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff, selected_metric = result
+    config.plot_settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff, selected_metric = result
+    save_folder = file_paths["save_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/plotsWithoutSaveFolder"
     
-    export_data = plot_settings.get("export_data", False)
+    config.force_to_plot = list(set(
+        force
+        for side_forces in forces_to_plot.values()
+        for force, selected in side_forces.items() if selected
+    ))
+    export_data = config.plot_settings.get("export_data", False)
     
     normalizebyweight = filter_settings["normalize_by_weight"]
     
@@ -65,16 +75,26 @@ def main():
 
     if filter_settings["normalize_by_weight"] == True:
         print("\nForces Normalized by weight")
-        optional_suffix = "_NBW"
-    if plot_settings.get("show_impuls_data", False):
+        optional_suffix += "_NBW"
+    if config.plot_settings.get("show_impuls_data", False):
         optional_suffix += "_IMP"
+    if filter_settings["use_filter"]:
+        config.filter_suffix = "_withSVG"
+    else:
+        config.filter_suffix = "_raw"
+
+    optional_suffix +=config.filter_suffix
     
  
     folder_path = file_paths["data_folder"] or "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/pipeline"
     save_folder = file_paths["save_folder"] or folder_path + "/Figures"
-    optional_suffix = file_paths["suffix"] or ""
-    optional_suffix = "_" + optional_suffix if optional_suffix else ""
+    
+
+    # optional suffix for file names
+    optional_suffix += file_paths["suffix"] or ""
+    config.optional_suffix = optional_suffix
     optional_suffix += get_force_suffix(forces_to_plot)
+
 
     unique_force_list = get_unique_selected_forces(forces_to_plot=forces_to_plot)
     print(" unqiue_force_lsit ",unique_force_list )
@@ -84,15 +104,18 @@ def main():
         "SVGpolyorder": filter_settings["polyorder"],
         "use_filter": filter_settings["use_filter"],
         "normalizeByweight": filter_settings["normalize_by_weight"],
-        "save_plot": plot_settings["save"],
+        "save_plot": config.plot_settings["save"],
         "autotrim": filter_settings["autotrim"]
     }
 
+    config.processing_settings = copy.deepcopy(settings)
+
     folder_list = [
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/testing",
       #  "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Moment",
     #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/068-static-dynamic",
     #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/069-static",
-    "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/070-dynamic",
+    #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/070-dynamic",
      # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability"
        # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Test-Rest",
        #     "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2",
@@ -100,9 +123,13 @@ def main():
  #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik",
  #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik/Leftside_data",
  #  "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik/Rightside_data",
- # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow",
+  #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow",
  #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black",
- #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey",
+# "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey",
+ #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front",
+ #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/cross",
+ "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe"
+# "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front/createJson"
  # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Clipping",
  #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe",
  # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout",
@@ -111,46 +138,48 @@ def main():
 ]
     
     for curr_folder in folder_list:
+        if config.deebug_mode:
+            print("currentnt folder: ", curr_folder)
         folder_path = curr_folder
-        save_folder = curr_folder + "/Figures"
+        save_folder = curr_folder + "/plots"
+        config.current_folder = folder_path
+        config.file_path = folder_path
+        config.save_folder = save_folder
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
 
         
         all_lvm_data_dict = load_lvm_data(folder_path, settings=settings, export=export_data)
-
-        if filter_settings["use_filter"]:
-            optional_suffix += "_filtered_with-" + str(filter_settings["window_length"]) + "-" + str(filter_settings["polyorder"])
-        else:
-            optional_suffix += "_raw"
         if cutoff.get("active", False):
             optional_suffix += f"_trimmed-S{cutoff['start']}-E{cutoff['end']}"
         
         all_lvm_data_dict, forces_g1, forces_g2 = prepare_data(all_lvm_data_dict, forces_to_plot, cutoff)
         if all_lvm_data_dict is None:
             return
-
         
-    #  print("\nall_lvm_data_dict keys:", list(all_lvm_data_dict.keys()))
-
+        if config.plot_settings["create"]:
         # compute globale limits for y_limits and save it with every Hold such that every dataframe can access it
-        ylims = plot_settings["y_limits"]
-        for filename, file_data in all_lvm_data_dict.items():
-            print("\n+++++++++++ new File ++++++++++++++")
-            all_lvm_data_dict[filename] = compute_global_ylimits_for_plots(file_data, forces_g1, forces_g2, ylims=ylims)
-            #print_current_dict_summary(current_dict=all_lvm_data_dict)
+            ylims = config.plot_settings["y_limits"]
+            for filename, file_data in all_lvm_data_dict.items():
+                print("\n+++++++++++ plotting new File ++++++++++++++")
+                all_lvm_data_dict[filename] = compute_global_ylimits_for_plots(file_data, forces_g1, forces_g2, ylims=ylims)
+                #print_current_dict_summary(current_dict=all_lvm_data_dict)
 
-        export_plot_settings(settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff, selected_metric)
+            export_plot_settings(settings, holds_to_plot, forces_to_plot, filter_settings, file_paths, cutoff, selected_metric)
 
         # Wenn "Plots erstellen" aktiviert ist:
-        if plot_settings["create"]:
+        
             print("\n ----------------------------------------------")
             print("\n ---------------- Plotting --------------------")  
             print("\n ----------------------------------------------")
+            config.optional_suffix += "_" + "_".join(config.force_to_plot)
+            if config.plot_only_wooden_holds:
+                config.optional_suffix += "_oWH"
+                
 
-            if plot_settings.get("diagram_type") == "time":   
+            if config.plot_settings.get("diagram_type") == "time":   
                 # Explizite Einzelprüfungen für die verschiedenen Plotoptionen
-                if plot_settings.get("plot_data_per_hold", False) and not plot_settings.get("split_fmz", False) and not plot_settings.get("compare_forces", False):
+                if config.plot_settings.get("plot_data_per_hold", False) and not config.plot_settings.get("split_fmz", False) and not config.plot_settings.get("compare_forces", False):
                     print("Plot: plot_data_per_hold aktiviert")
                     for curr_filename, data_per_file in all_lvm_data_dict.items():
                         print(f"\n +++Plotting GL+GR: {curr_filename}")
@@ -160,15 +189,15 @@ def main():
                             forces_g1,
                             forces_g2,
                             curr_filename + optional_suffix,
-                            save_plot=plot_settings["save"],
+                            save_plot=config.plot_settings["save"],
                             save_folder=save_folder,
                             cutoff=cutoff,
                             normalizebyweight=normalizebyweight,
-                            show_contact_time=plot_settings.get("show_impuls_data", False),
-                            show_interval=plot_settings.get("show_interval", False)
+                            show_contact_time=config.plot_settings.get("show_impuls_data", False),
+                            show_interval=config.plot_settings.get("show_interval", False)
                         )
 
-                if plot_settings.get("compare_forces", False) and not plot_settings.get("split_fmz", False):
+                if config.plot_settings.get("compare_forces", False) and not config.plot_settings.get("split_fmz", False):
                     print("Plot: plot_selected_forces_comparison aktiviert")
                     for filename, file_data in all_lvm_data_dict.items():
                         #Zeitdiagramm gelcihe Kraft beider Griffe in einem Plot
@@ -178,14 +207,14 @@ def main():
                             forces_g2,
                             filename=filename + optional_suffix,
                             save_folder=save_folder,
-                            save_plot=plot_settings["save"],
+                            save_plot=config.plot_settings["save"],
                             cutoff=cutoff,
                             normalizebyweight=normalizebyweight,
-                            show_contact_time=plot_settings.get("show_impuls_data", False),
-                            show_interval=plot_settings.get("show_interval", False)
+                            show_contact_time=config.plot_settings.get("show_impuls_data", False),
+                            show_interval=config.plot_settings.get("show_interval", False)
                         )
 
-                if plot_settings.get("split_fmz", False):
+                if config.plot_settings.get("split_fmz", False):
                     print("Plot: split_fmz aktiviert")
                     #Zeitdiagramm F oben Mz unten
                     for curr_filename, data_per_file in all_lvm_data_dict.items():
@@ -203,12 +232,12 @@ def main():
                                 forces_g2,
                                 curr_filename + optional_suffix,
                                 grip_label="links",
-                                save_plot=plot_settings["save"],
+                                save_plot=config.plot_settings["save"],
                                 save_folder=save_folder,
                                 cutoff=cutoff,
                                 normalizebyweight=normalizebyweight,
-                                show_contact_time=plot_settings.get("show_impuls_data", False),
-                                show_interval=plot_settings.get("show_interval", False)
+                                show_contact_time=config.plot_settings.get("show_impuls_data", False),
+                                show_interval=config.plot_settings.get("show_interval", False)
                             )
                         print(f"Holds to plot G1R is {holds_to_plot.get('G1R', False)}")
                         if holds_to_plot.get("G1R", False):
@@ -218,17 +247,17 @@ def main():
                                 forces_g1,
                                 curr_filename + optional_suffix,
                                 grip_label="rechts",
-                                save_plot=plot_settings["save"],
+                                save_plot=config.plot_settings["save"],
                                 save_folder=save_folder,
                                 cutoff=cutoff,
                                 normalizebyweight=normalizebyweight,
-                                show_contact_time=plot_settings.get("show_impuls_data", False),
-                                show_interval=plot_settings.get("show_interval", False)
+                                show_contact_time=config.plot_settings.get("show_impuls_data", False),
+                                show_interval=config.plot_settings.get("show_interval", False)
                             )
     #----------------------------- BAR PLOTS -----------------------------------
-            if plot_settings.get("diagram_type") == "bar":
+            if config.plot_settings.get("diagram_type") == "bar":
 
-                if plot_settings.get("plot_mean_metrics_bar", False):
+                if config.plot_settings.get("plot_mean_metrics_bar", False):
                     print("Plot: plot_mean_metrics_bar aktiviert")
                     for side in ["G1R", "G2L"]:
                         # Bar plot
@@ -239,13 +268,13 @@ def main():
                             side=side,
                             figsize=(8, 6),
                             title=f"Mean-{selected_metric}",
-                            save_plot=plot_settings["save"],
+                            save_plot=config.plot_settings["save"],
                             save_folder=save_folder,
-                            #split_view=plot_settings.get("bar_split", False)
+                            #split_view=config.plot_settings.get("bar_split", False)
 
                         )
 
-                if plot_settings.get("plot_fgr_sum", False):
+                if config.plot_settings.get("plot_fgr_sum", False):
                     print("Plot: plot_FgR_sum aktiviert")
                     for filename, file_data in all_lvm_data_dict.items():
                         # Zeitdiagramm FgR Summe
@@ -255,7 +284,7 @@ def main():
                             forces_g2=forces_g2,
                             filename=filename + optional_suffix,
                             grip_label="G1R + G2L",
-                            save_plot=plot_settings["save"],
+                            save_plot=config.plot_settings["save"],
                             save_folder=save_folder,
                             normalizebyweight=normalizebyweight
                         )
@@ -263,7 +292,7 @@ def main():
                 # Zeige alle erzeugten Plots
 
                 # Plot force vector trace if enabled
-                if plot_settings.get("plot_vector", False):
+                if config.plot_settings.get("plot_vector", False):
                     for curr_filename, data_per_file in all_lvm_data_dict.items():
                         for side in ["G1R", "G2L"]:
                             df = data_per_file.get(side, {}).get("data", None)
@@ -272,12 +301,14 @@ def main():
                                     df,
                                     forces=("Fy", "Fz"),
                                     title=f"{curr_filename} - {side} Kraftvektorverlauf",
-                                    save_plot=plot_settings["save"],
+                                    save_plot=config.plot_settings["save"],
                                     save_folder=save_folder,
                                     filename=f"{curr_filename}_{side}_force_vector",
-                                    plot_vector_interval_only=plot_settings.get("plot_vector_interval_only", False),
+                                    plot_vector_interval_only=config.plot_settings.get("plot_vector_interval_only", False),
                                     intervals=data_per_file[side].get("contact_time", {}).get("Fy", [])
                                 )
+        else:
+            print("Plots erstellen ist deaktiviert. Keine Plots generiert.")
 
     # Show all generated plots after all plotting is done
     import matplotlib.pyplot as plt

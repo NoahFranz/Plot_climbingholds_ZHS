@@ -1,4 +1,5 @@
 INTERVAL_SHADE_COLOR = "lightgrey"
+import config
 import matplotlib.pyplot as plt
 import pandas as pd
 from plotUITLS import (
@@ -16,21 +17,8 @@ import numpy as np
 import os  # für Dateisystemoperationen
 from utils import print_nested_keys
 import json
-COLOR_MAPPING = {
-    "Fy": "orange",
-    "Fx": "green",
-    "Fz": "blue",
-    "Mz": "#8B1A1A",  # Kaminrot
-    "FgR": "#02A15C",
-    "FgR_1": "#C95C02",  # Lime
-    "FgR_2": "#0032C7",  # 
-    "FgR_sum": "#898111",
-    "FgR_calc": "#32CD32",
-    "Fres_yz": "#4B0082",     # Indigo
-    "φ_yz": "#800080",      # Lila
-    "Fres_xyz": "red"     # Orange-Rot
-    
-}
+
+
 
 
 
@@ -123,12 +111,12 @@ def adjust_color(color: str, shift: float = 0.2) -> Tuple[float, float, float]:
 
 def get_color_for(force: str, hold: str) -> Union[str, Tuple[float, float, float]]:
     """
-    Wählt eine Farbe für 'force' und 'hold' basierend auf COLOR_MAPPING.
+    Wählt eine Farbe für 'force' und 'hold' basierend auf config.COLOR_MAPPING.
     Für G2L wird die Basisfarbe leicht angepasst.
     """
     # wählt je nach Griff (G2L vs. G1R) die passende Farbe aus
-    base_key = next((f for f in COLOR_MAPPING if f in force), None)
-    base_color = COLOR_MAPPING.get(base_key, "black")
+    base_key = next((f for f in config.COLOR_MAPPING if f in force), None)
+    base_color = config.COLOR_MAPPING.get(base_key, "black")
     # Für den linken Griff (G2L) leicht ins Spektrum verschieben
     if hold == "G2L":
         return adjust_color(base_color, shift=0.15)
@@ -208,13 +196,15 @@ def plot_single_hold_splitview(
         # die Breite ist fix (6.3 Zoll, passend für LaTeX) und Höhe auf 8 Zoll gewählt.
         fig, (ax_top, ax_bottom) = plt.subplots(2, 1, figsize=PLOT_CONFIG["default_figsize"], sharex=True)
         file_identity = side_data.get("file_identity", filename)
-        fig.suptitle(file_identity, fontsize=12)
+        if config.show_title_in_plots:
+            fig.suptitle(file_identity, fontsize=12)
         
         # Untere bzw. obere Achsen einrichten und Daten plotten
         for col in normal_cols:
-            curret_forcen = next((f for f in COLOR_MAPPING if f in col), None)
-            ax_top.plot(time, hold_data[col], label=clean_label(col), color=COLOR_MAPPING.get(curret_forcen))
-        ax_top.set_title("Kräfte – " + grip_label)
+            curret_forcen = next((f for f in config.COLOR_MAPPING if f in col), None)
+            ax_top.plot(time, hold_data[col], label=clean_label(col), color=config.COLOR_MAPPING.get(curret_forcen))
+        if config.show_title_in_plots:
+            ax_top.set_title("Kräfte – " + grip_label)
         if normal_cols:
             data_subset = hold_data[normal_cols].dropna()
             ax_top.set_ylim(compute_ylimits(data_subset, margin=margin, fallback=(-100, 1000)))
@@ -233,8 +223,9 @@ def plot_single_hold_splitview(
             annotate_impulses_on_axis(ax_top, side_data, forces)
 
         for col in moment_cols:
-            ax_bottom.plot(time, hold_data[col], label=clean_label(col), color=COLOR_MAPPING["Mz"])
-        ax_bottom.set_title("Moment – " + grip_label)
+            ax_bottom.plot(time, hold_data[col], label=clean_label(col), color=config.COLOR_MAPPING["Mz"])
+        if config.show_title_in_plots:
+            ax_bottom.set_title("Moment – " + grip_label)
         ax_bottom.set_xlabel("Time [s]")
         ax_bottom.set_ylabel("Mz [Nm]")
         if moment_cols:
@@ -254,7 +245,7 @@ def plot_single_hold_splitview(
         # Wende Plot-Stil ganz am Ende an, damit alle Änderungen übernommen werden
         apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
         if save_plot:
-            save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
+            save_figure_with_title(fig, filename + config.optional_suffix, grip_label, save_plot=save_plot, figstyle=figstyle, save_folder=save_folder)
     except Exception as e:
         # Ausnahmebehandlung: Bei Fehlern in der Plot-Erstellung ausgeben, aber Programm nicht abbrechen
         logger.exception(f"plot_single_hold_splitview failed for {filename} / {grip_label}: {e}")
@@ -321,7 +312,7 @@ def plot_data_per_hold(
         grip_label = "OL_UR"
 
         # Farbzuordnungen für die verschiedenen Krafttypen (inkl. neu hinzugefügter)
-        color_mapping = COLOR_MAPPING
+        color_mapping = config.COLOR_MAPPING
         
         # Prüfe, ob ausschließlich der Momentenwert "Mz" ausgewählt wurde für jeden Griff
         only_mz_g1 = forces_g1 == ["Mz"]
@@ -336,7 +327,8 @@ def plot_data_per_hold(
         axes = [axes] if num_axes == 1 else axes
         # === Einfügen des Dateinamens/Identität als Suptitle ===
         file_identity = plot_dict.get("file_identity", filename)
-        fig.suptitle(file_identity, fontsize=12)
+        if config.show_title_in_plots:
+            fig.suptitle(file_identity, fontsize=12)
 
         # --- Plot für linken Griff (G2L) ---
         if only_mz_g2:
@@ -344,7 +336,8 @@ def plot_data_per_hold(
             ax_left = axes[0]
             time_left = plot_dict["G2L"]["data"]["Time [s]"]
             plot_mz_on_secondary_axis(ax_left, time_left, plot_dict["G2L"]["data"], mz_cols)
-            ax_left.set_title("GL")
+            if config.show_title_in_plots:
+                ax_left.set_title("GL")
             ax_left.set_xlabel("Time [s]")
             ax_left.set_ylabel("Mz [Nm]")
             combine_legends(ax_left, None, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
@@ -357,12 +350,25 @@ def plot_data_per_hold(
             ax_left.set_title("GL")
             # Normalkräfte plotten und y-Grenzen berechnen
             data_left = plot_dict["G2L"]["data"][[col for col in plot_dict["G2L"]["data"].columns if any(f in col for f in forces_g2)]]
-            if "global_y_limits" in plot_dict.get("G1R", {}):
-                y_min_left = plot_dict["G1R"]["global_y_limits"]["global_y_min"] * 1.2
-                y_max_left = plot_dict["G1R"]["global_y_limits"]["global_y_max"] * 1.2
+            if "global_y_limits" in plot_dict.get("G1R", {}) or "global_y_limits" in plot_dict.get("G2L", {}):
+                global_limits = plot_dict.get("G2L", {}).get("global_y_limits") or plot_dict.get("G1R", {}).get("global_y_limits")
+                y_min_left = global_limits["global_y_min"] * 1.2
+                y_max_left = global_limits["global_y_max"] * 1.2
+                try:
+                    ax_left.set_ylim([y_min_left, y_max_left])
+                except Exception as e:
+                    logger.warning(f"Fehler beim Setzen der y-Limits für G2L: {e}")
+                    ax_left.set_ylim([-5, 60])  # Fallback-Werte
             else:
-                y_min_left, y_max_left = compute_ylimits(data_left, margin=margin, fallback=(-100, 1000))
-            ax_left.set_ylim([y_min_left, y_max_left])
+                # Robust logic to guard against NaN or Inf in y-limits
+                if not data_left.empty and data_left.notna().any().any():
+                    y_min_left, y_max_left = compute_ylimits(data_left, margin=margin, fallback=(-100, 1000))
+                    if not (np.isfinite(y_min_left) and np.isfinite(y_max_left)):
+                        logger.warning("Computed y-limits contain NaN or Inf, skipping set_ylim.")
+                    else:
+                        ax_left.set_ylim([y_min_left, y_max_left])
+                else:
+                    logger.warning("No valid data in data_left for G2L; skipping ylim setting.")
             
             
             # Optional: Momente auf Sekundärachse anzeigen
@@ -407,7 +413,8 @@ def plot_data_per_hold(
                 time_right = plot_dict["G1R"]["data"]["Time [s]"]
                 plot_normal_forces(ax_right, plot_dict["G1R"]["data"], forces_g1, color_mapping)
 
-                ax_right.set_title("GR")
+                if config.show_title_in_plots:
+                    ax_right.set_title("GR")
                 ax_right.set_xlabel("Time [s]")
 
                 # Nach Plotten der Normalkräfte: lokale y-Limits berechnen
@@ -491,7 +498,8 @@ def plot_selected_forces_comparison(
                 allForcesList.append(f)
         fig, axes = plt.subplots(2, 1, figsize=PLOT_CONFIG["default_figsize"])
         file_identity = file_dict.get("file_identity", filename)
-        fig.suptitle(file_identity, fontsize=12)
+        if config.show_title_in_plots:
+            fig.suptitle(file_identity, fontsize=12)
         axes_list = list(axes)
         logger.debug(f"allForcesList in plot_selected_forces_comparison: {allForcesList}")
         for idx, current_force in enumerate(allForcesList[:2]):
@@ -505,7 +513,7 @@ def plot_selected_forces_comparison(
                 if not cols:
                     continue
                 df = file_dict[current_hold]["data"]
-                _plot_force_lines(ax, df, [current_force], COLOR_MAPPING, alpha=alpha, suffix=suffix)
+                _plot_force_lines(ax, df, [current_force], config.COLOR_MAPPING, alpha=alpha, suffix=suffix)
         # Einheitliche y-Grenzen basierend auf zusammengesetzten Daten beider Griffe
         for idx, current_force in enumerate(allForcesList[:2]):
             ax = axes_list[idx]
@@ -534,7 +542,8 @@ def plot_selected_forces_comparison(
         except Exception as e:
             logger.warning(f"Fehler in show_contact_time Block: {e}")
         # Legenden, Achsentitel, Stil setzen und Plot speichern/anzeigen
-        axes[0].set_title(f"Vergleich: {filename}")
+        if config.show_title_in_plots:
+            axes[0].set_title(f"Vergleich: {filename}")
         axes[0].set_xlabel("Time [s]")
         axes[0].legend(ncol=PLOT_CONFIG["legend_ncol"])
         axes[1].set_xlabel("Time [s]")
@@ -542,10 +551,10 @@ def plot_selected_forces_comparison(
         apply_default_plot_style(fig=fig, normalizebyweight=normalizebyweight)
         if save_plot:
             # Ensure target directory exists before saving
-            full_path = f"{save_folder}/{filename}.png"
+            full_path = f"{save_folder}/{filename}{config.optional_suffix}.png"
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
             plt.savefig(full_path)
-            print(f"Plot gespeichert unter: {save_folder}")
+            print(f"Plot gespeichert unter: {full_path}")
         plt.show()
     except Exception as e:
         # Ausnahmebehandlung: Bei Fehlern in der Plot-Erstellung ausgeben, aber Programm nicht abbrechen
@@ -566,13 +575,14 @@ def _plot_impulses_bar_split(ax1, ax2, indices_g1, filtered_names_g1, filtered_g
     bars2 = ax2.bar(indices_g1, filtered_g1, color=bar_colors_g1, label="GR")
     
     # Achsenbeschriftungen
-    ax1.set_title(f"{title} – {force} – GL")
-    ax2.set_title(f"{title} – {force} – GR")
+    if config.show_title_in_plots:
+        ax1.set_title(f"{title} – {force} – GL")
+        ax2.set_title(f"{title} – {force} – GR")
     ax2.set_ylabel(f"Impuls P{direction} {y_title}")
     ax1.set_xticks(indices_g2)
-    ax1.set_xticklabels(filtered_names_g2, rotation=25, ha="right")
+    ax1.set_xticklabels([config.file_acronyms_map.get(name, name) for name in filtered_names_g2], rotation=25, ha="right")
     ax2.set_xticks(indices_g1)
-    ax2.set_xticklabels(filtered_names_g1, rotation=25, ha="right")
+    ax2.set_xticklabels([config.file_acronyms_map.get(name, name) for name in filtered_names_g1], rotation=25, ha="right")
 
     # Gemeinsame y-Limits für beide Achsen setzen (auf Maximalbereich beider)
     min_g1 = min(filtered_g1) if filtered_g1 else 0
@@ -626,9 +636,10 @@ def _plot_impulses_bar_combined(ax, indices, filtered_names, filtered_g1, filter
     bars2 = ax.bar(indices - width/2, filtered_g2, width, color=bar_colors_g2, label="GL")
     bars1 = ax.bar(indices + width/2, filtered_g1, width, color=bar_colors_g1, label="GR")
     ax.set_xticks(indices)
-    ax.set_xticklabels(filtered_names, rotation=25, ha="right")
+    ax.set_xticklabels([config.file_acronyms_map.get(name, name) for name in filtered_names], rotation=25, ha="right")
     ax.set_ylabel(f"Impuls P{direction} {y_title}")
-    ax.set_title(f"{title} – {force}")
+    if config.show_title_in_plots:
+        ax.set_title(f"{title} – {force}")
     ax.legend()
 
     # Werte und Kontaktzeiten als kleine Texte direkt über den Balken anzeigen
@@ -663,10 +674,35 @@ def plot_mean_metrics_bar(
     if forces is None:
         forces = []
 
+    # Map GUI-friendly names to data keys depending on side
+    mapped_forces = []
+    for f in forces:
+        if f == "FgR":
+            if side == "G2L":
+                mapped_forces.append("FgR_2")
+            elif side == "G1R":
+                mapped_forces.append("FgR_1")
+        else:
+            mapped_forces.append(f)
+
     labels, plot_data = [], []
 
     is_contact_time = metric.lower() == "contact time" or "Contacttime" in metric
-    for fname, content in all_lvm_data_dict.items():
+    # optinol for choosing order of files.
+    if config.use_custom_bar_order:
+        ordered_keys = []
+        if config.plot_only_wooden_holds:
+            holds_to_plot = config.order_for_wooden_holds
+        else:
+            holds_to_plot = config.file_order_bar_holds
+        for prefix in holds_to_plot:
+            match = next((k for k in all_lvm_data_dict if k.startswith(prefix)), None)
+            if match:
+                ordered_keys.append(match)
+    else:
+        ordered_keys = list(all_lvm_data_dict.keys())
+    for fname in ordered_keys:
+        content = all_lvm_data_dict[fname]
         mean_metrics = content.get(side, {}).get("intervals", {}).get("Mean-Metrics", {})
         if not mean_metrics:
             print(f"⚠️ Kein 'Mean-Metrics' für {side} in Datei: {fname}")
@@ -677,10 +713,11 @@ def plot_mean_metrics_bar(
             val_entry = mean_metrics.get("Contacttime", {})
             val = val_entry.get("mean", np.nan)
             plot_data.append([val])
-            labels.append(content.get("file_identity", fname))
+            file_number = fname[:3]
+            labels.append(config.file_acronyms_map.get(file_number, file_number))
         else:
             row = []
-            for force in forces:
+            for force in mapped_forces:
                 val_entry = mean_metrics.get(force, None)
                 if isinstance(val_entry, dict) and metric in val_entry:
                     val = val_entry[metric]
@@ -690,7 +727,8 @@ def plot_mean_metrics_bar(
                     val = None
                 row.append(val if val is not None else np.nan)
             plot_data.append(row)
-            labels.append(content.get("file_identity", fname))
+            file_number = fname[:3]
+            labels.append(config.file_acronyms_map.get(file_number, file_number))
 
     # Check if plot_data is empty before proceeding
     if not plot_data:
@@ -705,23 +743,35 @@ def plot_mean_metrics_bar(
 
     fig, ax = plt.subplots(figsize=figsize)
     for i in range(plot_data.shape[1]):
-        base_key = forces[i] if not is_contact_time else r"$t{\mathrm{contact}}$"
-        color = COLOR_MAPPING.get(base_key, "black")
+        if metric.lower() == "impuls":
+            force_label = forces[i]
+            base_key = force_label.replace("F", "P", 1)
+            color_key = force_label  # use F* as color source
+        elif is_contact_time:
+            base_key = r"$t{\mathrm{contact}}$"
+            color_key = base_key
+        else:
+            base_key = forces[i]
+            color_key = base_key
+        color = config.COLOR_MAPPING.get(color_key, "black")
         ax.bar(x + i * width, plot_data[:, i], width, label=base_key, color=color)
 
     # Dynamischer Y-Achsentitel je nach Metrik
     metric_lower = metric.lower()
     if normalizebyweight:
         if metric_lower == "impuls":
-            ylabel = r"P [\%]"
+            ylabel = r"P [%BWs]"
         elif metric_lower == "maxrofd":
-            ylabel = r"∆F / ∆t [\%/s]"
+            ylabel = r"∆F / ∆t [%BW/s]"
         elif metric_lower in ["contact time", "contacttime"]:
             ylabel = "Time [s]"
         elif metric_lower =="max":
-            ylabel = r"F [\%]"
+            ylabel = r"F [%BW]"
+        elif metric_lower =="hausdorff":
+            ylabel = "HD"
         else:
-            ylabel = r"F [\%]"
+            ylabel = r"F [%BW]"
+            
 
     else:
         if metric_lower == "impuls":
@@ -732,26 +782,41 @@ def plot_mean_metrics_bar(
             ylabel = "Time [s]"
         elif metric_lower =="max":
             ylabel = "F [N]"
+        elif metric_lower =="hausdorff":
+            ylabel = "HD"
         else:
             ylabel = "F [N]"
 
     ax.set_ylabel(ylabel)
-    ax.set_title(f"{title} ({side})")
-    ax.set_xticks(x + width * (plot_data.shape[1] - 1) / 2)
-    ax.set_xticklabels(labels, rotation=45, ha="right")
-    ax.legend()
+    if config.show_title_in_plots:
+        ax.set_title(f"{title} ({side})")
+    if config.manual_y_limits_var:
+        y_min = config.plot_settings["y_limits"][0]
+        y_max = config.plot_settings["y_limits"][1]
+     
+    else:
+        y_min = plot_data.min().min()/1.05
+        y_max = plot_data.max().max()*1.1
+    y_min = 0
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=25) 
+    ax.set_ylim([y_min,y_max])
+    ax.legend(loc='upper right', ncol=PLOT_CONFIG["legend_ncol"])
     plt.tight_layout()
-
     if save_plot:
         safe_title = title.replace(":", "_").replace(" ", "_")
-        path = os.path.join(save_folder, f"{safe_title}_{side}.png")
+        path = os.path.join(save_folder, f"{safe_title}_{side}{config.optional_suffix}.png")
         # Ensure target directory exists before saving
         os.makedirs(os.path.dirname(path), exist_ok=True)
         plt.savefig(path)
         print(f"Plot gespeichert unter: {path}")
     
-
     plt.show()
+
+
+
+
+
 def plot_force_vector_trace(
     df: pd.DataFrame,
     forces: Tuple[str, str] = ("Fy", "Fz"),
@@ -816,14 +881,15 @@ def plot_force_vector_trace(
                  head_width=0.05, head_length=0.1,
                  alpha=0.8, color="red", length_includes_head=True)
 
-    ax.set_xlabel("Fz [%]", fontsize=12, color="darkred")
-    ax.set_ylabel("Fy [%]", fontsize=12, color="darkred")
-    ax.set_title("Vektore", fontsize=14)
+    ax.set_xlabel("Fz [%BW]", fontsize=12, color="darkred")
+    ax.set_ylabel("Fy [%BW]", fontsize=12, color="darkred")
+    if config.show_title_in_plots:
+        ax.set_title("Vektore", fontsize=14)
     ax.grid(True)
     ax.set_aspect('equal')
 
     if save_plot:
-        path = os.path.join(save_folder, f"{filename}.png")
+        path = os.path.join(save_folder, f"{filename}{config.config.optional_suffix}.png")
         # Ensure target directory exists before saving
         os.makedirs(os.path.dirname(path), exist_ok=True)
         plt.savefig(path)
@@ -853,7 +919,7 @@ def plot_FgR_sum(
         time = df["Time [s]"]
         
         # FgR_sum immer plotten
-        ax.plot(time, df["FgR_sum [%]"], label="FgR_sum", color=COLOR_MAPPING.get("FgR_sum", "black"), linewidth=1.2)
+        ax.plot(time, df["FgR_sum [%]"], label="FgR_sum", color=config.COLOR_MAPPING.get("FgR_sum", "black"), linewidth=1.2)
 
         # Optional: Weitere Kräfte aus G1R und G2L
         for side, forces in [("G1R", forces_g1), ("G2L", forces_g2)]:
@@ -869,9 +935,9 @@ def plot_FgR_sum(
                 for col in cols:
                     # Prüfe auf FgR-Krafttyp für Farblogik
                     if "FgR" in col:
-                        color = COLOR_MAPPING.get("FgR_1" if side == "G1R" else "FgR_2", "grey")
+                        color = config.COLOR_MAPPING.get("FgR_1" if side == "G1R" else "FgR_2", "grey")
                     else:
-                        color = COLOR_MAPPING.get(force, "grey")
+                        color = config.COLOR_MAPPING.get(force, "grey")
                     ax.plot(
                         side_df["Time [s]"],
                         side_df[col],
@@ -885,16 +951,17 @@ def plot_FgR_sum(
         ax.legend(by_label.values(), by_label.keys(), ncol=PLOT_CONFIG["legend_ncol"])
 
         file_identity = file_dict.get("file_identity", filename)
-        ax.set_title(f"{file_identity}")
+        if config.show_title_in_plots:
+            ax.set_title(f"{file_identity}")
         ax.set_xlabel("Time [s]")
-        ax.set_ylabel("Kraft [%]")
+        ax.set_ylabel("Kraft [%BW]")
         apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
 
         # Setze Y-Achse explizit auf 0–110 % (am Ende, direkt vor plt.show())
         ax.set_ylim([0, 110])
 
         if save_plot:
-            save_figure_with_title(fig, filename, grip_label, save_plot=save_plot, figstyle="FgR_sum", save_folder=save_folder)
+            save_figure_with_title(fig, filename + config.optional_suffix, grip_label, save_plot=save_plot, figstyle="FgR_sum", save_folder=save_folder)
         plt.show()
 
     except Exception as e:

@@ -4,7 +4,7 @@ import re
 import numpy as np
 
 
-# plotting data from raw data as excel files i.e. sued for Crosstalk evaluation and plotting.
+# plotting data from raw data as excel files i.e. used for Crosstalk evaluation and plotting.
 
 # === CONFIGURATION ===
 input_folder = "/Users/noah/LRZ Sync+Share/MA/Plot_Figures/System_characteristics/Cross_Talk_plots/G2_static/excel stats"
@@ -69,7 +69,7 @@ for file in files:
     std_rel = summary.loc['std'] / summary.loc['mean'].replace(0, np.nan) * 100
     std_rel = std_rel.replace([np.inf, -np.inf], np.nan).round(1).astype(str) + '%'
 
-    summary.loc['std rel'] = std_rel
+    summary.loc['CoV [%]'] = std_rel
 
     # Ensure proper row order
     summary = summary.reindex(['mean', 'max', 'min', 'std', 'std rel'])

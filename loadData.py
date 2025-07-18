@@ -3,14 +3,14 @@ import glob
 import os
 import re
 import json
-
+import config
 import numpy as np
 import pandas as pd
 from scipy.signal import savgol_filter
 
 from utils import clean_data, get_min_max_values_per_column
 from utils import get_force_contact_times, compute_impulses_per_contact, trim_low_force_periods
-from additional_calculations import compute_hausdorff_dimensions_all_axes, calc_hausdorff_dimension_for_single_signal
+from additional_calculations import compute_hausdorff_dimensions_all_axes, calc_hausdorff_dimension_for_single_signal, plot_hausdorff_intervals
 
 
 # --- Neue Hilfsfunktion: Zeitbereich aus Kontaktzeiten bestimmen ---
@@ -70,16 +70,22 @@ def parse_metadata_from_filename(file_name):
         "weight": 100,
         "identity": "Unknown",
         "file_number": "000",
+        "level": "unknown",
     }
     if match := re.search(r"_(\d+)kg", file_name):
         result["weight"] = int(match.group(1))
     if match := re.search(r"(?<=_)([^_]+)(?=_lvl-)", file_name):
         result["athlete"] = match.group(1)
+    # Extract climber's level
+    if match := re.search(r"_lvl-([^_]+)", file_name):
+        result["level"] = match.group(1)
     if match := re.search(r"^(.+?)_\d+kg", file_name):
         result["identity"] = match.group(1)
-    # Extract 3-digit file number before first dash
-    if match := re.search(r"(\d{3})(?=-)", file_name):
+    # Extract 3-digit file number from the start of the identity
+    if match := re.match(r"(\d{3})", result["identity"]):
         result["file_number"] = match.group(1)
+        config.file_number = result["file_number"]
+        config.processed_files_list.append(result["file_number"])
     return result
 
 def split_grip_sides(df):
@@ -94,9 +100,9 @@ def compute_contact_times(file_data: Dict, force_keys: List[str]) -> None:
     for side in ["G1R", "G2L"]:
         contact_times = get_force_contact_times(file_data[side]["data"], force_keys)
 
-        # Entferne Intervalle, die kürzer als 0.9 Sekunden sind
+        # Entferne Intervalle, die kürzer als 0.5 Sekunden sind
         for force, intervals in contact_times.items():
-            filtered = [(t0, t1) for (t0, t1) in intervals if (t1 - t0) >= 0.9]
+            filtered = [(t0, t1) for (t0, t1) in intervals if (t1 - t0) >= 0.5]
             # --- Additional force threshold filter ---
             df = file_data[side]["data"]
             extended_valid_intervals = []
@@ -121,7 +127,7 @@ def compute_contact_times(file_data: Dict, force_keys: List[str]) -> None:
             for force in force_keys:
                 if force not in contact_times:
                     contact_times[force] = shared_times
-        print(f"{side} contact times:", {k: v for k, v in contact_times.items()})
+        #print(f"{side} contact times:", {k: v for k, v in contact_times.items()})
 
 def compute_impulses(file_data: Dict, force_keys: List[str]) -> None:
     """
@@ -158,7 +164,7 @@ def compute_impulses(file_data: Dict, force_keys: List[str]) -> None:
         # Store a clean copy under "all" without including "all" itself recursively
         impulses_filtered = {k: v for k, v in impulses.items() if k != "all"}
         impulses["all"] = impulses_filtered
-        print(f"{side} all impulses: {impulses['all']}")
+        #print(f"{side} all impulses: {impulses['all']}")
         file_data[side]["impulses"] = impulses
 
 
@@ -166,15 +172,21 @@ def compute_impulses(file_data: Dict, force_keys: List[str]) -> None:
 # --- Neue Funktion: Kraftstatistiken pro Kontaktintervall ---
 def compute_interval_force_stats(file_data: Dict) -> None:
     """
-    Berechnet Min, Max, Mittelwert und Impuls für Fx, Fy, Fz innerhalb jedes Kontaktintervalls.
+    Berechnet Min, Max, Mittelwert und Impuls, hausdorff für Fx, Fy, Fz innerhalb jedes Kontaktintervalls.
     Speichert die Ergebnisse unter file_data[side]["intervals"]["I1"], ["I2"], ...
+    Vor der Berechnung werden ungültige Intervalle entfernt (basierend auf config.invalid_intervals_list).
+    Nach der Berechnung werden die Zeitbereiche der ungültigen Intervalle auch aus dem DataFrame entfernt.
     """
     from utils import compute_impulses_per_contact  # ensure this import is present at top of file
     for side in ["G1R", "G2L"]:
         df = file_data[side]["data"]
         intervals = file_data[side]["contact_time"].get("Fz", [])
-        interval_stats = {}
-
+        # --- Store segments of invalid intervals ---
+        # (new logic: store in file_data["invalid_intervals"][side][...])
+        if "invalid_intervals" not in file_data:
+            file_data["invalid_intervals"] = {}
+        if side not in file_data["invalid_intervals"]:
+            file_data["invalid_intervals"][side] = {}
         # Mapping for force to impulse name
         force_map = {
             "Fx": "Px",
@@ -183,33 +195,40 @@ def compute_interval_force_stats(file_data: Dict) -> None:
             "Mz": "PMz",
             "Fres_xyz": "Pxyz",
             "Fres_yz": "Pyz",
-            "FgR_sum": "Psum"
+            "FgR_sum": "Psum",
+            "FgR_1": "Pgr1",
+            "FgR_2": "Pgr2"
         }
-
+        interval_stats = {}
+        file_number = file_data.get("file_number", "000")
+        # Loop over all intervals and store invalid segments before continue
         for i, (t0, t1) in enumerate(intervals):
+            if (i + 1) in config.invalid_intervals_list:
+                mask = (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
+                segment = df.loc[mask]
+                file_data["invalid_intervals"][side][f"I{i+1}"] = segment.to_dict(orient="list")
+                continue
+            # For valid intervals, define mask/segment here
             mask = (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
             segment = df.loc[mask]
-
+            current_interval = f"I{i+1}"
             stats_entry = {
                 "interval_timing": (round(t0, 3), round(t1, 3)),
                 "duration_s": round(t1 - t0, 3)
             }
-
             for force in force_map:
-                # Only select columns that have the force and contain a bracket (i.e., a single sensor/side/axis)
+                # Only select columns that have the force 
                 if force == "FgR_sum":
-                    # FgR_sum is a sum column, not per-side, but present in DataFrame
                     force_cols = [col for col in df.columns if col.startswith("FgR_sum")]
                 else:
-                    force_cols = [col for col in df.columns if force in col and "[" in col]
+                    force_cols = [col for col in df.columns if force in col]
                 if force_cols:
-                    force_cols = [force_cols[0]]  # use only the first match to avoid double side summing
+                    force_cols = [force_cols[0]]
                     series = segment[force_cols[0]]
                     if force in ["Fx", "Mz"]:
                         impulse = float(np.trapz(np.abs(series), x=segment["Time [s]"]))
                     else:
                         impulse = float(np.trapz(series, x=segment["Time [s]"]))
-                    # Compute Rate of Force Development (maxROFD)
                     time = segment["Time [s]"].values
                     if len(time) >= 2:
                         slope = np.gradient(series, time)
@@ -222,27 +241,21 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                         "mean": round(series.mean(), 1),
                         "impuls": round(impulse, 1),
                         "maxROFD": round(maxROFD, 2) if maxROFD is not None else None,
-                        "hausdorff": calc_hausdorff_dimension_for_single_signal(time, series)  # Placeholder for Hausdorff dimension
+                        "hausdorff": calc_hausdorff_dimension_for_single_signal(
+                            time, series, current_side=side, current_force=force, current_interval=current_interval,
+                        )
                     }
-
                     stats_entry[force] = force_dict
-                    # Add impulse under new name as well
                     stats_entry[force_map[force]] = round(impulse, 1)
-
             interval_stats[f"I{i+1}"] = stats_entry
-            # Also save the raw time-force data for this interval
             stats_entry["interval_data"] = segment.to_dict(orient="list")
-
         # Mittelwerte über alle Intervalle hinweg berechnen
         mean_metrics = {}
         all_force_data = {}
-
-        # Only include forces, not the extra impulse keys
         for entry in interval_stats.values():
             for force, metrics in entry.items():
                 if force in ["interval_timing"]:
                     continue
-                # Only aggregate for force stats, not the separate impulse keys
                 if isinstance(metrics, dict) and any(k in metrics for k in ["maxROFD", "hausdorff"]):
                     if force not in all_force_data:
                         all_force_data[force] = {"min": [], "max": [], "mean": [], "impuls": [], "maxROFD": [], "hausdorff": []}
@@ -250,23 +263,24 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                         val = metrics.get(key)
                         if val is not None:
                             all_force_data[force][key].append(val)
-
+        # Ensure FgR_sum is included if present
+        # (already handled above; this ensures it is included in stats and mean)
         for force, metric_lists in all_force_data.items():
             mean_entry = {}
             for key, vals in metric_lists.items():
                 if vals:
                     mean_entry[key] = round(np.mean(vals), 2)
             mean_metrics[force] = mean_entry
-
- 
-
-        # Durchschnittliche Kontaktdauer ergänzen
         durations = [entry["duration_s"] for entry in interval_stats.values() if "duration_s" in entry]
         if durations:
             mean_metrics["Contacttime"] = {"mean": round(np.mean(durations), 2)}
-
         interval_stats["Mean-Metrics"] = mean_metrics
         file_data[side]["intervals"] = interval_stats
+        # Remove invalid intervals' time ranges from df
+        for i, (t0, t1) in enumerate(intervals):
+            if (i + 1) in config.invalid_intervals_list:
+                df.drop(df[(df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)].index, inplace=True)
+        df.reset_index(drop=True, inplace=True)
 
 def calc_FgR(current_dict):
     """
@@ -368,19 +382,42 @@ def export_impulse_data(file_data, fname, folder_path):
         print(f"Fehler beim Schreiben der Impulsdatei '{txt_path}': {e}")
 
 
-# --- Neue Funktion: Excel-Export ---
+
 def export_data_to_excel(file_data, fname, folder_path):
     excel_folder = os.path.join(folder_path, "excel")
     os.makedirs(excel_folder, exist_ok=True)
-    excel_path = os.path.join(excel_folder, f"{fname}_Interval_summary.xlsx")
+    excel_path = os.path.join(excel_folder, f"{config.file_number}{config.optional_suffix}_Interval_summary.xlsx")
     with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
         # Metadaten
         meta_df = pd.DataFrame({
             "athletename": [file_data.get("athletename", "")],
             "climberforce": [file_data.get("climberforce", "")],
-            "file_identity": [file_data.get("file_identity", "")]
+            "file_identity": [file_data.get("file_identity", "")],
+            "level": [file_data.get("level", "")],
+            "invalid_intervals": [", ".join(f"I{x}" for x in config.invalid_intervals_list)]
         })
         meta_df.to_excel(writer, sheet_name="Metadata", index=False)
+
+        # Store skipped intervals with placeholder content
+        skipped = {}
+        for i in config.invalid_intervals_list:
+            for side in ["G1R", "G2L"]:
+                contact = file_data[side].get("contact_time", {}).get("Fz", [])
+                if i - 1 < len(contact):
+                    t0, t1 = contact[i - 1]
+                    df = file_data[side]["data"]
+                    segment = df[(df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)]
+                    skipped_key = f"I{i}_{side}"
+                    skipped[skipped_key] = segment.to_dict(orient="list")
+
+        # Combine all skipped intervals into one DataFrame and write to a single sheet named "Invalid_Intervals"
+        all_skipped_rows = []
+        for key, content in skipped.items():
+            df = pd.DataFrame(content)
+            df.insert(0, "interval_id", key)
+            all_skipped_rows.append(df)
+        if all_skipped_rows:
+            pd.concat(all_skipped_rows).to_excel(writer, sheet_name="Invalid_Intervals", index=False)
 
         for side in ["G1R", "G2L"]:
             # Kontaktzeiten
@@ -408,19 +445,27 @@ def export_data_to_excel(file_data, fname, folder_path):
                         if force in ["interval_timing", "duration_s"]:
                             continue
                         row = {"intervall_id": int_key, "force": force}
+                        # Ensure hausdorff is included for each metric row
                         if isinstance(values, dict):
                             row.update(values)
+                            # If hausdorff is not present, add it as None
+                            if "hausdorff" not in row:
+                                row["hausdorff"] = None
                         else:
                             row["impuls"] = values  # für einfache Impulse wie Px, Py etc.
+                            row["hausdorff"] = None
                         row.update(base_info)
                         int_rows.append(row)
                     # Add a DataFrame-compatible empty row after each interval
-                    int_rows.append({col: None for col in ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls"]})
+                    int_rows.append({col: None for col in ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls", "hausdorff"]})
 
                 int_rows = [row for row in int_rows if row]  # Remove empty dicts
                 int_df = pd.DataFrame(int_rows)
-                cols = ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls"]
+                cols = ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls", "hausdorff"]
                 existing_cols = [col for col in cols if col in int_df.columns]
+                # Ensure 'hausdorff' is included in export columns
+                if "hausdorff" not in existing_cols:
+                    existing_cols.append("hausdorff")
                 int_df = int_df[existing_cols]
                 int_df.to_excel(writer, sheet_name=f"{side}_Intervals", index=False)
                 worksheet = writer.sheets[f"{side}_Intervals"]
@@ -447,7 +492,9 @@ def process_single_lvm_file(file_path, settings):
       5. Strukturieren und Normieren
       6. Resultierende berechnen
     """
-    # === 1. Metadaten einlesen ===
+    if config.deebug_mode:
+        print(f"Calculating file: {file_path}")
+    # === 1. Settings einlesen ===
     SVGwindowlength = settings.get("SVGwindowlength")
     SVGpolyorder = settings.get("SVGpolyorder")
     usefilter = settings.get("use_filter", False)
@@ -460,6 +507,10 @@ def process_single_lvm_file(file_path, settings):
     df = prepare_time_column(df, autotrim=autotrim)
 
     file_name = os.path.splitext(os.path.basename(file_path))[0]
+    # --- Auto-skip interval 2 for specific files ---
+    if file_name.startswith("017-Shoes-3_1_FH-best_Sh-trail_TK-front"):
+        if 2 not in config.invalid_intervals_list:
+            config.invalid_intervals_list.append(2)
     metadata = parse_metadata_from_filename(file_name)
     athlete_name = metadata["athlete"]
     kgclimber = metadata["weight"]
@@ -501,7 +552,10 @@ def process_single_lvm_file(file_path, settings):
     file_data["climberforce"] = climberforce
     file_data["athletename"] = athlete_name
     file_data["file_identity"] = file_identity
+    file_data["level"] = metadata.get("level", "")
+   # file_data["file_number"] = file_identity[:3]
     file_data["total_df"] = clean_df_trimmed
+    
 
     # Normierung und weitere Berechnungen pro Griffseite
     for side in ["G1R", "G2L"]:
@@ -524,12 +578,18 @@ def finalize_file_export(file_data, fname, folder_path, save_plot):
     Führt die Export- und Berechnungslogik pro Datei durch.
     """
     force_keys = ["Fy", "Fx", "Fz", "Mz", "Fres_xyz", "Fres_yz"]
+    if config.deebug_mode:
+        print(f"in finalize_file_export_config-file_number pre setting: {config.file_number}")
+    config.file_number = fname[:3]  # Set file_number from filename
+    if config.deebug_mode:
+        print(f"in finalize_file_export_config-file_number AFTER setting: {config.file_number}")
     compute_contact_times(file_data, force_keys)
     compute_interval_force_stats(file_data)
-    plot_hausdorff_intervals(file_data, folder_path, fname)
+    if config.create_hausdorff_plots:
+        plot_hausdorff_intervals(file_data, folder_path, fname)
     compute_impulses(file_data, force_keys)
-  #  compute_hausdorff_dimensions_all_axes(file_data)
-    export_data_to_excel(file_data, fname, folder_path)
+    if config.plot_settings["export_data"]:
+        export_data_to_excel(file_data, fname, folder_path)
     # if save_plot:
     #     export_impulse_data(file_data, fname, folder_path)
 
@@ -543,18 +603,12 @@ def load_lvm_data(folder_path, *, settings, export=False) -> Dict[str, Dict[str,
 
     file_paths = sorted([fp for fp in glob.glob(os.path.join(folder_path, "*.lvm")) if "MAX" not in os.path.basename(fp)])
     for file_path in file_paths:
-        print(file_path)
+        print("loading: ",file_path)
+        
         file_name, file_data, clean_df_trimmed = process_single_lvm_file(file_path, settings)
+      #  config.file_number = file_name[:3]  # Set file_number from filename
+        print("in load_lvm_data_config.file_number = ",config.file_number)
         data_dict[file_name] = file_data
-        # clean_df_trimmed is already included in file_data["total_df"]
-        if export:
-            # Export JSON
-            json_path = os.path.join(folder_path, "json", f"{file_name}.json")
-            os.makedirs(os.path.dirname(json_path), exist_ok=True)
-            with open(json_path, "w") as f:
-                json.dump(file_data, f, indent=2, default=str)
-            # Export Excel
-            export_data_to_excel(file_data, file_name, folder_path)
 
     # Export und finale Berechnungen pro Datei
     for fname, file_data in data_dict.items():
@@ -572,18 +626,22 @@ def load_lvm_data(folder_path, *, settings, export=False) -> Dict[str, Dict[str,
                 }
             elif key != "total_df":
                 exportable_dict[fname][key] = val
+        # Adjust logic for invalid_intervals: copy if present in content
+        if "invalid_intervals" in content:
+            exportable_dict[fname]["invalid_intervals"] = content["invalid_intervals"]
     if export:
-        output_path = os.path.join(folder_path, "summary_metadata.json")
+        filename = "_".join(config.processed_files_list) + config.optional_suffix+"_summary.json"
+        output_path = os.path.join(folder_path, filename)
         try:
             with open(output_path, "w") as f:
                 json.dump(exportable_dict, f, indent=2)
             print(f"Zusammenfassung gespeichert unter: {output_path}")
         except Exception as e:
             print(f"Fehler beim Speichern der JSON-Datei: {e}")
-    print("\n++++++++++++++++++++++++++++++++++")
-    for filename in data_dict:
-        print(f"\n--- {filename} ---")
-        print(list(data_dict[filename].keys()))
+        print("\n++++++++++++ files in JSON ++++++++++++++++++++++")
+        for filename in data_dict:
+            print(f"\n--- {filename} ---")
+        # print(list(data_dict[filename].keys()))
 
     return data_dict if data_dict else None
 
@@ -628,42 +686,3 @@ def calc_fgr_sum(df):
     return df
 
 
-# --- Plotting: Hausdorff intervals ---
-import matplotlib.pyplot as plt
-import os
-
-def plot_hausdorff_intervals(file_data: Dict[str, Any], folder_path: str, fname: str) -> None:
-    """
-    Plots force-time curves for each interval and force axis with Hausdorff values annotated.
-    Saves plots as PNG files in a 'plots' subfolder.
-    """
-    plot_dir = os.path.join(folder_path, "plots")
-    os.makedirs(plot_dir, exist_ok=True)
-
-    for side in ["G1R", "G2L"]:
-        intervals = file_data.get(side, {}).get("intervals", {})
-        for int_key, stats in intervals.items():
-            if int_key == "Mean-Metrics":
-                continue
-            interval_data = stats.get("interval_data", {})
-            time = interval_data.get("Time [s]", [])
-            if not time:
-                continue
-            for force in ["Fx", "Fy", "Fz", "Mz", "Fres_yz", "Fres_xyz"]:
-                # Find the correct key containing the force and a bracket (like "[N]")
-                matching_keys = [k for k in interval_data if force in k]
-                force_series = interval_data.get(matching_keys[0], []) if matching_keys else []
-                hausdorff = stats.get(force, {}).get("hausdorff", None)
-                if force_series and hausdorff is not None:
-                    plt.figure()
-                    plt.plot(time, force_series, label=f"{force}")
-                    plt.xlabel("Time [s]")
-                    plt.ylabel(force)
-                    plt.title(f"{fname} | {side} | {int_key} | {force} | HD = {hausdorff:.3f}")
-                    plt.grid(True)
-                    file_number = file_data.get("file_number", "000")
-                    force_plot_dir = os.path.join(plot_dir, f"{file_number}_{side}", force)
-                    os.makedirs(force_plot_dir, exist_ok=True)
-                    filename = f"{side}_{int_key}_{force}_HD.png".replace(" ", "_")
-                    plt.savefig(os.path.join(force_plot_dir, filename))
-                    plt.close()

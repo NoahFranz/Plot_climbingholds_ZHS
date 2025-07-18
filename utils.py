@@ -79,7 +79,7 @@ def get_force_suffix(forces_to_plot):
         return "_all_"
     else:
         sorted_forces = sorted(selected_forces)
-        return "_only_" + "_".join(sorted_forces)
+        return "_".join(sorted_forces)
 
 def trim_dataframe_by_time(df, start_seconds, end_seconds):
     """
@@ -157,22 +157,22 @@ def get_force_contact_times(
     end_threshold: Optional[float] = None
 ) -> Dict[str, Tuple[float, float]]:
     """
-    Bestimmt Kontaktzeiten anhand von 'Fz', 'Fy' im DataFrame.
-    Nur die Kraft 'Fz', 'Fy'  wird zur Detektion der Kontaktzeiten verwendet.
-    Für alle anderen Kräfte werden exakt dieselben Zeitabschnitte (Kontaktzeiten) verwendet wie für 'Fz','Fy' .
+    Bestimmt Kontaktzeiten anhand von 'Fy' im DataFrame.
+    Nur die Kraft 'Fy' wird zur Detektion der Kontaktzeiten verwendet.
+    Für alle anderen Kräfte werden exakt dieselben Zeitabschnitte (Kontaktzeiten) verwendet wie für 'Fy'.
     
     Für jede Kontaktzeit gilt zusätzlich:
-      - Das Intervall beginnt, wenn 'Fz' oder 'Fy'  für mindestens start_dur Sekunden oberhalb des Startschwellwertes liegt.
-      - Das Intervall endet, wenn 'Fz' oder 'Fy'  für mindestens end_dur Sekunden unterhalb des Endschwellwertes bleibt.
-      - Innerhalb des Intervalls muss 'Fz','Fy'  mindestens einmal ≥ 5 betragen.
+      - Das Intervall beginnt, wenn 'Fy' für mindestens start_dur Sekunden oberhalb des Startschwellwertes liegt.
+      - Das Intervall endet, wenn 'Fy' für mindestens end_dur Sekunden unterhalb des Endschwellwertes bleibt.
+      - Innerhalb des Intervalls muss 'Fz' mindestens einmal ≥ 5 betragen.
 
     Rückgabe:
-      { 'Fz': [(t0, t1), ...], 'Fx': [(t0, t1), ...], ... }
+      { 'Fz': [(t0, t1), ...], 'Fy': [(t0, t1), ...], ... }
     """
     # Default hardcoded thresholds & force set (for quick tests)
     default_start_threshold = 1.3
     default_end_threshold = 1.1
-    # Use both Fz and Fy for detection logic
+    # Use only Fy for detection logic
     forces_detect = {"Fz", "Fy"}
     contact_time = {}
     time = df[time_col]
@@ -208,42 +208,25 @@ def get_force_contact_times(
         mask_start_dict[force] = series > threshold_start
         mask_end_dict[force] = series <= threshold_end
 
-    # Find all rising-edge indices in Fz where an interval could start
-    mask_start_fz = mask_start_dict.get("Fz", pd.Series([False]*len(df), index=df.index))
-    # Determine interval ends using Fy only
+    # Use only Fy for rising-edge detection and interval ends
+    mask_start_fy = mask_start_dict.get("Fy", pd.Series([False]*len(df), index=df.index))
     mask_end_fy = mask_end_dict.get("Fy", pd.Series([False]*len(df), index=df.index))
-    start_edges_fz = mask_start_fz & ~mask_start_fz.shift(fill_value=False)
-    start_idxs_fz = time.index[start_edges_fz]
+    start_edges_fy = mask_start_fy & ~mask_start_fy.shift(fill_value=False)
+    start_idxs_fy = time.index[start_edges_fy]
 
     force_intervals = []
-    for fz_start_idx in start_idxs_fz:
-        t0_fz = time.loc[fz_start_idx]
-        # Only consider end after t0, but using Fy mask for interval end
-        mask_end_after_fy = mask_end_fy & (time >= t0_fz)
+    for fy_start_idx in start_idxs_fy:
+        t0 = time.loc[fy_start_idx]
+        # Find corresponding end time using Fy
+        mask_end_after_fy = mask_end_fy & (time >= t0)
         if mask_end_after_fy.any():
-            end_idx_fz = mask_end_after_fy[mask_end_after_fy].index[0]
-            t1_fz = time.loc[end_idx_fz]
+            end_idx = mask_end_after_fy[mask_end_after_fy].index[0]
+            t1 = time.loc[end_idx]
         else:
-            end_idx_fz = time.index[-1]
-            t1_fz = time.iloc[-1]
+            end_idx = time.index[-1]
+            t1 = time.iloc[-1]
 
-        # Compute corresponding start index for Fy (could keep previous logic if needed)
-        mask_start_fy = mask_start_dict.get("Fy", pd.Series([False]*len(df), index=df.index))
-        mask_start_after_fy = mask_start_fy & (time >= t0_fz)
-        if mask_start_after_fy.any():
-            fy_start_idx = mask_start_after_fy[mask_start_after_fy].index[0]
-            t0_fy = time.loc[fy_start_idx]
-        else:
-            t0_fy = t0_fz
-            fy_start_idx = fz_start_idx
-
-        # Use min of Fz and Fy for start, but end always determined by Fy
-        final_start_idx = min(fz_start_idx, fy_start_idx)
-        final_end_idx = end_idx_fz
-        t0 = time.loc[final_start_idx]
-        t1 = time.loc[final_end_idx]
-
-        # Accept only intervals where duration ≥ end_dur and duration > 0.9
+        # Accept only intervals where duration ≥ end_dur and > 0.9 s
         if (t1 - t0) >= end_dur and (t1 - t0) > 0.9:
             # Zusatzbedingung: min. einmal Fz >= 5 innerhalb des Intervalls
             Fz_cols = [col for col in df.columns if "Fz" in col]

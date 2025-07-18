@@ -39,19 +39,32 @@ def clean_label(label):
 
 def compute_ylimits(data_subset, margin=1.2, fallback=(-100, 800)):
     """
-    Berechnet die y-Achsen-Grenzen mit Sicherheitsmarge. Fällt auf Standardwerte zurück, wenn ungültig.
+    Berechnet die y-Achsen-Grenzen mit Sicherheitsmarge.
+    Unterstützt sowohl Pandas DataFrames als auch NumPy-Arrays.
     """
-    if data_subset.empty:
-        print("using fallback values for y-limits")
-        return fallback
-    y_min = data_subset.min().min()
-    y_max = data_subset.max().max()
+    if isinstance(data_subset, pd.DataFrame):
+        if data_subset.empty:
+            print("Using fallback y-limits (empty DataFrame)")
+            return fallback
+        y_min = data_subset.min().min()
+        y_max = data_subset.max().max()
+    elif isinstance(data_subset, np.ndarray):
+        if data_subset.size == 0:
+            print("Using fallback y-limits (empty array)")
+            return fallback
+        y_min = np.nanmin(data_subset)
+        y_max = np.nanmax(data_subset)
+    else:
+        raise TypeError("data_subset must be a DataFrame or ndarray")
+
     if pd.isna(y_min) or pd.isna(y_max) or math.isinf(y_min) or math.isinf(y_max):
         return fallback
     if abs(y_min) < 7 and abs(y_max) < 7:
         return (-7, 7)
-    return (y_min * margin if y_min < 0 else y_min / margin,
-            y_max * margin if y_max > 0 else y_max / margin)
+    return (
+        y_min * margin if y_min < 0 else y_min / margin,
+        y_max * margin if y_max > 0 else y_max / margin,
+    )
 
 def apply_default_plot_style(fig, normalizebyweight=False):
     """
@@ -120,12 +133,8 @@ def save_figure_with_title(fig, filename, grip_label, save_plot=False, figstyle=
         #for ax in fig.get_axes():
         #    ax.set_title("")
         full_path = os.path.join(save_folder, safe_name)
-        fig.savefig(full_path)
-        svg_name = safe_name.replace(".png", ".svg")
-        full_path_svg = os.path.join(save_folder, svg_name)
-        fig.savefig(full_path_svg)
+        fig.savefig(full_path, dpi=700)
         print(f"Plot gespeichert unter: {full_path}")
-        print(f"Plot gespeichert unter: {full_path_svg}")
     else:
         fig.suptitle(safe_name, fontsize=14)
         fig._suptitle = safe_name

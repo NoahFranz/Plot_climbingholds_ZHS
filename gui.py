@@ -215,6 +215,10 @@ def run_gui():
     save_plots_var = tk.BooleanVar(value=False)
     save_plots_checkbox = tk.Checkbutton(submit_frame, text="Save plots", variable=save_plots_var)
     save_plots_checkbox.pack(side="left", padx=10)
+    # Neue Checkbox: Show title in saved plots
+    show_title_var = tk.BooleanVar(value=False)
+    show_title_checkbox = tk.Checkbutton(submit_frame, text="Show title", variable=show_title_var)
+    show_title_checkbox.pack(side="left", padx=10)
     # Option zum Exportieren der Berechnungen
     export_data_var = tk.BooleanVar(value=False)
     export_data_checkbox = tk.Checkbutton(submit_frame, text="Export Calculations", variable=export_data_var)
@@ -527,9 +531,9 @@ def run_gui():
     kraefte_g1_frame = tk.LabelFrame(kraefte_frame, text="G1R")
     kraefte_g1_frame.pack(side="right", padx=10, pady=10, fill="both")
 
-    g1_Fy_var = tk.BooleanVar(value=True)
-    g1_Fz_var = tk.BooleanVar(value=True)
-    g1_Fx_var = tk.BooleanVar(value=True)
+    g1_Fy_var = tk.BooleanVar(value=False)
+    g1_Fz_var = tk.BooleanVar(value=False)
+    g1_Fx_var = tk.BooleanVar(value=False)
     g1_Mz_var = tk.BooleanVar(value=False)
     g1_FgR_var = tk.BooleanVar(value=False)
     g1_FgR_sum_var = tk.BooleanVar(value=False)
@@ -619,6 +623,10 @@ def run_gui():
         except Exception as e:
             print(f"Could not parse invalid intervals: {e}")
             config.invalid_intervals_list = []
+        # Append skipped intervals to optional_suffix if present
+        if config.invalid_intervals_list:
+            skipped_suffix = "-".join(f"I{x}" for x in config.invalid_intervals_list)
+            config.optional_suffix += f"_skipped-{skipped_suffix}"
         root.quit()
         root.destroy()
 
@@ -649,7 +657,15 @@ def run_gui():
     if cancelled["status"]:
         return None
 
-    plot_settings = {
+    # parse info to config.py
+    if set_y_limits_var.get():
+        config.manual_y_limits_var = True
+        config.y_min = y_min_var.get()
+        config.y_max = y_max_var.get()
+    if show_title_var.get() is False:
+        config.show_title_in_plots = False
+
+    config.plot_settings = {
         "create": create_plots_var.get(),
         "save": save_plots_var.get(),
         "export_data": export_data_var.get(),
@@ -657,25 +673,26 @@ def run_gui():
         "compare_forces": compare_forces_var.get(),
         "show_interval": show_interval_var.get(),
         "show_impuls_data": show_impuls_data_var.get(),
-        #"bar_split": bar_split_var.get(),
         "plot_bar": diagram_type_var.get() == "bar",
         "plot_mean_metrics_bar": diagram_type_var.get() == "bar",
-        #"show_values": show_values_var.get(),
         "plot_vector": plot_vector_var.get(),
         "plot_vector_interval_only": plot_vector_interval_only_var.get(),
         "plot_fgr_sum": plot_fgr_sum_var.get(),
         "plot_data_per_hold": plot_data_per_hold_var.get(),
         "y_limits": (y_min_var.get(), y_max_var.get()) if set_y_limits_var.get() else None,
-        "diagram_type": diagram_type_var.get()
+        "diagram_type": diagram_type_var.get(),
+        "show_title": show_title_var.get(),
     }
+    plot_settings = config.plot_settings
 
-    filter_settings = {
+    config.filter_settings = {
         "use_filter": use_SVG_filter_var.get(),
         "window_length": window_length_var.get(),
         "polyorder": polyorder_var.get(),
         "normalize_by_weight": normalize_by_weight_var.get(),
         "autotrim": autotrim_var.get(),
     }
+    filter_settings = config.filter_settings
 
     file_paths = {
         "save_folder": save_folder_var.get(),
