@@ -516,6 +516,12 @@ def process_single_lvm_file(file_path, settings):
     kgclimber = metadata["weight"]
     climberforce = kgclimber * 9.81
     file_identity = metadata["identity"]
+    
+    # Append excluded intervals from config if key is contained in file_name
+    for key in config.excluded_intervals_dict:
+        if key in file_name:
+            excluded = config.excluded_intervals_dict[key]
+            config.invalid_intervals_list.extend([i for i in excluded if i not in config.invalid_intervals_list])
 
     # === 2. Rohdatenverarbeitung ===
     clean_df = clean_data(df) # remove X_Value, comments and U_data
