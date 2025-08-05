@@ -59,3 +59,11 @@ show_title_in_plots = False
 
 plot_settings = {}
 filter_settings = {}
+
+
+excluded_intervals_dict = {
+    "031-Technik-3-rightside_crosstep_73kg_Noah": [2],
+    "032-Technik-4-rightside_backflag_73kg_Noah": [2],
+    "034-Technik-6-leftside_frontal_73kg_Noah_lvl-ADV_25-05-13_1821": [2, 3],
+    "036-Technik-8-leftside_crosstep_73kg_Noah_lvl-ADV_25-05-13_1830": [1],
+}
