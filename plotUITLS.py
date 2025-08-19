@@ -37,6 +37,54 @@ def clean_label(label):
     """
     return label.replace("_1", "").replace("_2", "").replace("[N]", "").replace("[Nm]", "").replace("[%]", "")
 
+
+# --------- New helper functions for pretty component/legend labels ---------
+def pretty_component(name: str) -> str:
+    """
+    Map a raw component name (e.g., 'Fy', 'Fz', 'Fx', 'Mz', 'FgR', 'Fres')
+    to a MathText-formatted string for legend labels (e.g., '$F_y$', '$M_z$').
+    Falls back to the original name if no mapping exists.
+    """
+    mapping = {
+        "Fy": r"$F_y$",
+        "Fz": r"$F_z$",
+        "Fx": r"$F_x$",
+        "Mz": r"$M_z$",
+        "FgR": r"$F_{\mathrm{gR}}$",
+        "FgR_sum": r"$F_{\mathrm{gR,sum}}$",
+        "Fres_xyz": r"$F_{\mathrm{res}}$",
+        "Pres_xyz": r"$P_{\mathrm{res}}$",
+        "tcontact": r"$t_{\mathrm{contact}}$",
+        "Py": r"$P_y$",
+        "Pz": r"$P_z$",
+        "Px": r"$P_x$",
+        "Pz": r"$P_z$",
+        "Pyz": r"$P_{\mathrm{yz}}",
+        "Fy_sum": r"$F_{y,\mathrm{sum}}$",
+        "Fz_sum": r"$F_{z,\mathrm{sum}}$",
+        "Fx_sum": r"$F_{x,\mathrm{sum}}$",
+        "Fres_xyz_sum": r"$F_{\mathrm{res,sum}}$",
+        "Pres_xyz_sum": r"$P_{\mathrm{res,sum}}$",
+    }
+    if not isinstance(name, str):
+        return name
+    key = name.strip()
+    return mapping.get(key, key)
+
+def build_legend_label(base_label: str, component: str, include_units: bool = False) -> str:
+    """
+    Compose a consistent legend label combining a base label (e.g., file/grip)
+    and a pretty-printed component. Optionally appends units for moments.
+
+    Example:
+        build_legend_label("TrialA", "Mz", include_units=True)
+        -> 'TrialA–$M_z$ [\%BW·m]'
+    """
+    comp = pretty_component(component)
+    if include_units and isinstance(component, str) and component.strip().startswith("M"):
+        return f"{base_label}–{comp} [%BW·m]"
+    return f"{base_label}–{comp}"
+
 def compute_ylimits(data_subset, margin=1.2, fallback=(-100, 800)):
     """
     Berechnet die y-Achsen-Grenzen mit Sicherheitsmarge.
@@ -147,14 +195,26 @@ def plot_normal_forces(ax, hold_data, forces, color_mapping):
     time_data = hold_data["Time [s]"]
     y_min = float('inf')
     y_max = float('-inf')
+    # ensure only one visible legend entry per base force label (e.g., FgR)
+    seen_labels = set()
     for force in forces:
         if force == "Mz":  # Ignoriere Mz in dieser Funktion
             continue
         # Suche Spalten, deren Name den Kraftnamen enthält
         cols = [col for col in hold_data.columns if force in col]
         for col in cols:
-            label = clean_label(col)
-            ax.plot(time_data, hold_data[col], label=label, color=color_mapping.get(force, None))
+            label = clean_label(col).strip()
+            # normalize FgR_1 / FgR_2 -> FgR for legend
+            if label.startswith("FgR_"):
+                label = "FgR"
+            # only first occurrence gets visible label
+            if label and label not in seen_labels:
+                legend_label = label
+                seen_labels.add(label)
+            else:
+                legend_label = f"_{label}" if label else None
+            color_key = "FgR" if force.startswith("FgR") else force
+            ax.plot(time_data, hold_data[col], label=legend_label, color=color_mapping.get(color_key, None))
 
 
     
@@ -182,14 +242,34 @@ def plot_mz_on_secondary_axis(ax, time, data, mz_cols):
 def combine_legends(ax, secondary_ax=None, loc="upper left", ncol=5):
     """
     Kombiniert die Legenden von ax und, falls vorhanden, secondary_ax.
+    Entfernt doppelte Labels (bevorzugt erste Vorkommen) und ignoriert
+    technisch versteckte Labels (die mit '_' beginnen).
     """
     handles, labels = ax.get_legend_handles_labels()
     if secondary_ax is not None:
         sec_handles, sec_labels = secondary_ax.get_legend_handles_labels()
         handles += sec_handles
         labels += sec_labels
-    if handles:
-        ax.legend(handles, labels, loc=loc, ncol=ncol)
+    # Filter + de-duplicate
+    seen = set()
+    f_handles, f_labels = [], []
+    for h, l in zip(handles, labels):
+        # skip empty labels, intentionally hidden labels, or invisible artists
+        if not l or l.startswith("_"):
+            continue
+        if hasattr(h, "get_visible") and not h.get_visible():
+            continue
+        if l in seen:
+            continue  # drop duplicates
+        seen.add(l)
+        f_handles.append(h)
+        f_labels.append(l)
+    if f_handles:
+        ax.legend(f_handles, f_labels, loc=loc, ncol=ncol)
+    else:
+        leg = ax.get_legend()
+        if leg is not None:
+            leg.remove()
 
 def set_dynamic_ylabel(ax, normalizebyweight=False):
     """
@@ -201,11 +281,11 @@ def set_dynamic_ylabel(ax, normalizebyweight=False):
     """
     labels = [line.get_label() for line in ax.get_lines()]
     if all("FgR" in label for label in labels):
-        ax.set_ylabel("F [%]")
+        ax.set_ylabel("F [%BW]")
     elif all("φ_yz" in label for label in labels):
         ax.set_ylabel("Winkel [°]")
     elif normalizebyweight:
-        ax.set_ylabel("F [%]")
+        ax.set_ylabel("F [%BW]")
     else:
         ax.set_ylabel("F [N]")
 

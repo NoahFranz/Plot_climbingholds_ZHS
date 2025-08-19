@@ -101,7 +101,7 @@ def run_gui():
     scrollbar.pack(side="right", fill="y")
 
     # Fenster zentrieren
-    window_width = 700
+    window_width = 1000
     window_height = 1300
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
@@ -161,7 +161,7 @@ def run_gui():
     # Auswahl der Metrik (z. B. "impuls", "mean", "max", "min")
     metric_label = tk.Label(bar_frame, text="Metric:")
     metric_label.pack(anchor="w")
-    metric_var = tk.StringVar(value="impuls")
+    metric_var = tk.StringVar(value="max")
     metric_dropdown = tk.OptionMenu(bar_frame, metric_var, "impuls", "mean", "max", "maxROFD", "contact time", "hausdorff")
     metric_dropdown.pack(anchor="w", padx=5)
 
@@ -219,6 +219,10 @@ def run_gui():
     show_title_var = tk.BooleanVar(value=False)
     show_title_checkbox = tk.Checkbutton(submit_frame, text="Show title", variable=show_title_var)
     show_title_checkbox.pack(side="left", padx=10)
+    # Neue Checkbox: Nur Holzbgriffe plotten
+    plot_only_wooden_var = tk.BooleanVar(value=False)
+    plot_only_wooden_checkbox = tk.Checkbutton(submit_frame, text="Only plot wooden holds", variable=plot_only_wooden_var)
+    plot_only_wooden_checkbox.pack(side="left", padx=10)
     # Option zum Exportieren der Berechnungen
     export_data_var = tk.BooleanVar(value=False)
     export_data_checkbox = tk.Checkbutton(submit_frame, text="Export Calculations", variable=export_data_var)
@@ -403,8 +407,8 @@ def run_gui():
     griff_frame = tk.LabelFrame(scrollable_frame, text="Hold")
     griff_frame.pack(pady=10, padx=10, fill="both")
     
-    griff_all_var = tk.BooleanVar(value=True)
-    griff_g1_var = tk.BooleanVar(value=True)
+    griff_all_var = tk.BooleanVar(value=False)
+    griff_g1_var = tk.BooleanVar(value=False)
     griff_g2_var = tk.BooleanVar(value=True)
 
     g1_all_var = tk.BooleanVar(value=False)
@@ -475,6 +479,10 @@ def run_gui():
     g2_Mz_var = tk.BooleanVar(value=False)
     g2_FgR_var = tk.BooleanVar(value=False)
     g2_FgR_sum_var = tk.BooleanVar(value=False)
+    g2_Fy_sum_var = tk.BooleanVar(value=False)
+    g2_Fz_sum_var = tk.BooleanVar(value=False)
+    g2_Fx_sum_var = tk.BooleanVar(value=False)
+    g2_Fres_xyz_sum_var = tk.BooleanVar(value=False)
     g2_Fres_var = tk.BooleanVar(value=False)
     g2_Fres_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres_yz", variable=g2_Fres_var, command=lambda: update_kraft_g2_single())
     g2_Fres_xyz_var = tk.BooleanVar(value=False)
@@ -489,6 +497,10 @@ def run_gui():
         g2_Mz_var.set(g2_all_var.get())
         g2_FgR_var.set(g2_all_var.get())
         g2_FgR_sum_var.set(g2_all_var.get())
+        g2_Fy_sum_var.set(g2_all_var.get())
+        g2_Fz_sum_var.set(g2_all_var.get())
+        g2_Fx_sum_var.set(g2_all_var.get())
+        g2_Fres_xyz_sum_var.set(g2_all_var.get())
         g2_Fres_var.set(g2_all_var.get())
         g2_Fres_xyz_var.set(g2_all_var.get())
         g2_phi_var.set(g2_all_var.get())
@@ -496,14 +508,16 @@ def run_gui():
     def update_kraft_g2_single():
         if not all([
             g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(),
-            g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_sum_var.get(), g2_Fres_var.get(),
-            g2_Fres_xyz_var.get(), g2_phi_var.get()
+            g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_sum_var.get(),
+            g2_Fy_sum_var.get(), g2_Fz_sum_var.get(), g2_Fx_sum_var.get(), g2_Fres_xyz_sum_var.get(),
+            g2_Fres_var.get(), g2_Fres_xyz_var.get(), g2_phi_var.get()
         ]):
             g2_all_var.set(False)
         if any([
             g2_Fy_var.get(), g2_Fx_var.get(), g2_Fz_var.get(),
-            g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_sum_var.get(), g2_Fres_var.get(),
-            g2_Fres_xyz_var.get(), g2_phi_var.get()
+            g2_Mz_var.get(), g2_FgR_var.get(), g2_FgR_sum_var.get(),
+            g2_Fy_sum_var.get(), g2_Fz_sum_var.get(), g2_Fx_sum_var.get(), g2_Fres_xyz_sum_var.get(),
+            g2_Fres_var.get(), g2_Fres_xyz_var.get(), g2_phi_var.get()
         ]):
             griff_g2_var.set(True)
 
@@ -514,6 +528,10 @@ def run_gui():
     g2_Mz_cb = tk.Checkbutton(kraefte_g2_frame, text="Mz", variable=g2_Mz_var, command=update_kraft_g2_single)
     g2_FgR_cb = tk.Checkbutton(kraefte_g2_frame, text="FgR", variable=g2_FgR_var, command=update_kraft_g2_single)
     g2_FgR_sum_cb = tk.Checkbutton(kraefte_g2_frame, text="FgR_sum", variable=g2_FgR_sum_var, command=update_kraft_g2_single)
+    g2_Fy_sum_cb = tk.Checkbutton(kraefte_g2_frame, text="Fy_sum", variable=g2_Fy_sum_var, command=update_kraft_g2_single)
+    g2_Fz_sum_cb = tk.Checkbutton(kraefte_g2_frame, text="Fz_sum", variable=g2_Fz_sum_var, command=update_kraft_g2_single)
+    g2_Fx_sum_cb = tk.Checkbutton(kraefte_g2_frame, text="Fx_sum", variable=g2_Fx_sum_var, command=update_kraft_g2_single)
+    g2_Fres_xyz_sum_cb = tk.Checkbutton(kraefte_g2_frame, text="Fres_xyz_sum", variable=g2_Fres_xyz_sum_var, command=update_kraft_g2_single)
 
     # Pack Reihenfolge: all zuerst, dann die anderen
     g2_all_cb.pack(anchor="w")
@@ -523,6 +541,10 @@ def run_gui():
     g2_Mz_cb.pack(anchor="w")
     g2_FgR_cb.pack(anchor="w")
     g2_FgR_sum_cb.pack(anchor="w")
+    g2_Fy_sum_cb.pack(anchor="w")
+    g2_Fz_sum_cb.pack(anchor="w")
+    g2_Fx_sum_cb.pack(anchor="w")
+    g2_Fres_xyz_sum_cb.pack(anchor="w")
     g2_Fres_cb.pack(anchor="w")
     g2_Fres_xyz_cb.pack(anchor="w")
     g2_phi_cb.pack(anchor="w")
@@ -537,6 +559,10 @@ def run_gui():
     g1_Mz_var = tk.BooleanVar(value=False)
     g1_FgR_var = tk.BooleanVar(value=False)
     g1_FgR_sum_var = tk.BooleanVar(value=False)
+    g1_Fy_sum_var = tk.BooleanVar(value=False)
+    g1_Fz_sum_var = tk.BooleanVar(value=False)
+    g1_Fx_sum_var = tk.BooleanVar(value=False)
+    g1_Fres_xyz_sum_var = tk.BooleanVar(value=False)
     g1_Fres_var = tk.BooleanVar(value=False)
     g1_Fres_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres_yz", variable=g1_Fres_var, command=lambda: update_kraft_g1_single())
     g1_Fres_xyz_var = tk.BooleanVar(value=False)
@@ -551,6 +577,10 @@ def run_gui():
         g1_Mz_var.set(g1_all_var.get())
         g1_FgR_var.set(g1_all_var.get())
         g1_FgR_sum_var.set(g1_all_var.get())
+        g1_Fy_sum_var.set(g1_all_var.get())
+        g1_Fz_sum_var.set(g1_all_var.get())
+        g1_Fx_sum_var.set(g1_all_var.get())
+        g1_Fres_xyz_sum_var.set(g1_all_var.get())
         g1_Fres_var.set(g1_all_var.get())
         g1_Fres_xyz_var.set(g1_all_var.get())
         g1_phi_var.set(g1_all_var.get())
@@ -558,14 +588,16 @@ def run_gui():
     def update_kraft_g1_single():
         if not all([
             g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(),
-            g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_sum_var.get(), g1_Fres_var.get(),
-            g1_Fres_xyz_var.get(), g1_phi_var.get()
+            g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_sum_var.get(),
+            g1_Fy_sum_var.get(), g1_Fz_sum_var.get(), g1_Fx_sum_var.get(), g1_Fres_xyz_sum_var.get(),
+            g1_Fres_var.get(), g1_Fres_xyz_var.get(), g1_phi_var.get()
         ]):
             g1_all_var.set(False)
         if any([
             g1_Fy_var.get(), g1_Fx_var.get(), g1_Fz_var.get(),
-            g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_sum_var.get(), g1_Fres_var.get(),
-            g1_Fres_xyz_var.get(), g1_phi_var.get()
+            g1_Mz_var.get(), g1_FgR_var.get(), g1_FgR_sum_var.get(),
+            g1_Fy_sum_var.get(), g1_Fz_sum_var.get(), g1_Fx_sum_var.get(), g1_Fres_xyz_sum_var.get(),
+            g1_Fres_var.get(), g1_Fres_xyz_var.get(), g1_phi_var.get()
         ]):
             griff_g1_var.set(True)
 
@@ -576,6 +608,10 @@ def run_gui():
     g1_Mz_cb = tk.Checkbutton(kraefte_g1_frame, text="Mz", variable=g1_Mz_var, command=update_kraft_g1_single)
     g1_FgR_cb = tk.Checkbutton(kraefte_g1_frame, text="FgR", variable=g1_FgR_var, command=update_kraft_g1_single)
     g1_FgR_sum_cb = tk.Checkbutton(kraefte_g1_frame, text="FgR_sum", variable=g1_FgR_sum_var, command=update_kraft_g1_single)
+    g1_Fy_sum_cb = tk.Checkbutton(kraefte_g1_frame, text="Fy_sum", variable=g1_Fy_sum_var, command=update_kraft_g1_single)
+    g1_Fz_sum_cb = tk.Checkbutton(kraefte_g1_frame, text="Fz_sum", variable=g1_Fz_sum_var, command=update_kraft_g1_single)
+    g1_Fx_sum_cb = tk.Checkbutton(kraefte_g1_frame, text="Fx_sum", variable=g1_Fx_sum_var, command=update_kraft_g1_single)
+    g1_Fres_xyz_sum_cb = tk.Checkbutton(kraefte_g1_frame, text="Fres_xyz_sum", variable=g1_Fres_xyz_sum_var, command=update_kraft_g1_single)
 
     # Pack Reihenfolge: all zuerst, dann die anderen
     g1_all_cb.pack(anchor="w")
@@ -585,6 +621,10 @@ def run_gui():
     g1_Mz_cb.pack(anchor="w")
     g1_FgR_cb.pack(anchor="w")
     g1_FgR_sum_cb.pack(anchor="w")
+    g1_Fy_sum_cb.pack(anchor="w")
+    g1_Fz_sum_cb.pack(anchor="w")
+    g1_Fx_sum_cb.pack(anchor="w")
+    g1_Fres_xyz_sum_cb.pack(anchor="w")
     g1_Fres_cb.pack(anchor="w")
     g1_Fres_xyz_cb.pack(anchor="w")
     g1_phi_cb.pack(anchor="w")
@@ -623,10 +663,14 @@ def run_gui():
         except Exception as e:
             print(f"Could not parse invalid intervals: {e}")
             config.invalid_intervals_list = []
+        # Also store this as override for per-file usage
+        config.gui_invalid_intervals_override = config.invalid_intervals_list.copy()
         # Append skipped intervals to optional_suffix if present
         if config.invalid_intervals_list:
             skipped_suffix = "-".join(f"I{x}" for x in config.invalid_intervals_list)
             config.optional_suffix += f"_skipped-{skipped_suffix}"
+        # Store the value of the "Only plot wooden holds" checkbox in config
+        config.plot_only_wooden_holds = plot_only_wooden_var.get()
         root.quit()
         root.destroy()
 
@@ -720,6 +764,10 @@ def run_gui():
             "Mz": g1_Mz_var.get(),
             "FgR": g1_FgR_var.get(),
             "FgR_sum": g1_FgR_sum_var.get(),
+            "Fy_sum": g1_Fy_sum_var.get(),
+            "Fz_sum": g1_Fz_sum_var.get(),
+            "Fx_sum": g1_Fx_sum_var.get(),
+            "Fres_xyz_sum": g1_Fres_xyz_sum_var.get(),
             "Fres_yz": g1_Fres_var.get(),
             "Fres_xyz": g1_Fres_xyz_var.get(),
             "φ_yz": g1_phi_var.get()
@@ -731,6 +779,10 @@ def run_gui():
             "Mz": g2_Mz_var.get(),
             "FgR": g2_FgR_var.get(),
             "FgR_sum": g2_FgR_sum_var.get(),
+            "Fy_sum": g2_Fy_sum_var.get(),
+            "Fz_sum": g2_Fz_sum_var.get(),
+            "Fx_sum": g2_Fx_sum_var.get(),
+            "Fres_xyz_sum": g2_Fres_xyz_sum_var.get(),
             "Fres_yz": g2_Fres_var.get(),
             "Fres_xyz": g2_Fres_xyz_var.get(),
             "φ_yz": g2_phi_var.get()

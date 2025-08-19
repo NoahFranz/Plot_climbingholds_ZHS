@@ -10,6 +10,7 @@ from plotUITLS import (
     plot_mz_on_secondary_axis,
     combine_legends,
     plot_normal_forces,
+    pretty_component,
 )
 from matplotlib.colors import to_rgb
 from typing import List, Dict, Any, Optional, Tuple, Union
@@ -17,6 +18,46 @@ import numpy as np
 import os  # für Dateisystemoperationen
 from utils import print_nested_keys
 import json
+
+
+# Helper to de-duplicate legend entries while preserving first occurrence
+def _finalize_unique_legend(ax: plt.Axes, ncol: int = 5, loc: str = "upper right"):
+    handles, labels = ax.get_legend_handles_labels()
+    seen = set()
+    uniq_h, uniq_l = [], []
+    for h, l in zip(handles, labels):
+        if not l or l in seen:
+            continue
+        seen.add(l)
+        uniq_h.append(h)
+        uniq_l.append(l)
+    if uniq_h:
+        ax.legend(uniq_h, uniq_l, ncol=ncol, loc=loc)
+    else:
+        leg = ax.get_legend()
+        if leg is not None:
+            leg.remove()
+
+
+# Helper to robustly match force columns, avoiding accidental matches to *_sum or other variants
+def _col_matches_force(colname: str, base_force: str) -> bool:
+    """Return True if `colname` belongs to `base_force` (Fy/Fz/Fx/Mz/FgR) but not to any *_sum or other variants.
+    Examples:
+      - base_force='Fy' matches 'Fy_1 [%]' and 'Fy_2 [N]' but NOT 'Fy_sum [%]'.
+      - base_force='FgR' matches 'FgR_1 [%]' and 'FgR_2 [%]' but NOT 'FgR_sum [%]'.
+      - base_force like 'Fy_sum' matches only the exact global sum column (unit may vary).
+    """
+    col = colname.strip()
+    bf = base_force.strip()
+    # Exact handling for *_sum keys: require exact prefix before unit
+    if bf.endswith("_sum"):
+        # Accept 'Fy_sum [%]' / 'Fy_sum [N]' / 'FgR_sum [%]' etc.
+        return col.startswith(bf + " ") or col == bf
+    # For base components, require side suffix `_1` or `_2` to avoid capturing *_sum
+    if bf in {"Fy", "Fz", "Fx", "Mz", "FgR"}:
+        return (f"{bf}_1 " in col) or (f"{bf}_2 " in col)
+    # Fallback: strict startswith check (before unit)
+    return col.startswith(bf + " ")
 
 
 
@@ -127,15 +168,23 @@ def _plot_force_lines(ax: plt.Axes, df: pd.DataFrame, forces: List[str],
                       suffix: str = "") -> None:
     """
     Plottet alle Spalten aus df, deren Name einen Eintrag in forces enthält.
+    Stellt sicher, dass 'FgR_sum' NICHT versehentlich mitgeplottet wird,
+    wenn nur 'FgR' (oder FgR_1/FgR_2) gewünscht ist.
     """
-    # Zeichnet alle ausgewählten Kräfte als Linien in der aktuellen Achse
     print("executing: _plo_data_force_lines")
     time = df["Time [s]"]
     for force in forces:
-        cols = [col for col in df.columns if force in col]
+        # Verwende einen strikten Matcher, um Substring-Kollisionen (z.B. Fy vs. Fy_sum) zu vermeiden
+        cols = [col for col in df.columns if _col_matches_force(col, force)]
         for col in cols:
-            ax.plot(time, df[col], label=clean_label(force) + suffix,
-                    color=color_map.get(force, "black"), alpha=alpha)
+            # Spezielle Farbwahl für FgR je nach Seite (Suffix _R/_L)
+            if force.startswith("FgR"):
+                color_key = "FgR_1" if suffix == "_R" else ("FgR_2" if suffix == "_L" else "FgR")
+            else:
+                color_key = force
+            side_tag = " (R)" if suffix == "_R" else (" (L)" if suffix == "_L" else "")
+            ax.plot(time, df[col], label=f"{pretty_component(force)}{side_tag}",
+                    color=color_map.get(color_key, "black"), alpha=alpha)
 
 
 
@@ -189,7 +238,10 @@ def plot_single_hold_splitview(
         
         # Filtere Kraftspalten basierend auf GUI-Auswahl
         selected_forces = [f for f in forces if f != "Mz"]
-        normal_cols = [col for col in hold_data.columns if any(f in col for f in selected_forces)]
+        normal_cols = [
+            col for col in hold_data.columns
+            if any(_col_matches_force(col, f) for f in selected_forces)
+        ]
         moment_cols = [col for col in hold_data.columns if "Mz" in col and "Mz" in forces]
 
         # Erstelle eine Figure mit 2 Zeilen und 1 Spalte; 
@@ -200,9 +252,28 @@ def plot_single_hold_splitview(
             fig.suptitle(file_identity, fontsize=12)
         
         # Untere bzw. obere Achsen einrichten und Daten plotten
+        # Ensure each base force appears only once in the legend (e.g., FgR)
+        seen_labels = set()
         for col in normal_cols:
             curret_forcen = next((f for f in config.COLOR_MAPPING if f in col), None)
-            ax_top.plot(time, hold_data[col], label=clean_label(col), color=config.COLOR_MAPPING.get(curret_forcen))
+            base_label = clean_label(col)
+            # Normalize FgR_1 / FgR_2 → FgR for legend (side is not shown in legend)
+            if base_label.startswith("FgR_"):
+                base_label = "FgR"
+            base_label = base_label.strip()
+            # Only the first occurrence gets the visible label; subsequent ones are hidden with a leading underscore
+            if base_label and base_label not in seen_labels:
+                legend_label = pretty_component(base_label)
+                seen_labels.add(base_label)
+            else:
+                # Use leading underscore to hide duplicate entries in legend
+                legend_label = f"_{pretty_component(base_label)}" if base_label else None
+            ax_top.plot(
+                time,
+                hold_data[col],
+                label=legend_label,
+                color=config.COLOR_MAPPING.get(curret_forcen)
+            )
         if config.show_title_in_plots:
             ax_top.set_title("Kräfte – " + grip_label)
         if normal_cols:
@@ -217,13 +288,13 @@ def plot_single_hold_splitview(
                 for (t0, t1) in ivals:
                     ax_top.axvspan(t0, t1, color=INTERVAL_SHADE_COLOR, alpha=0.15)
         # Füge eine Legende hinzu (innerhalb des Plots)
-        ax_top.legend(loc="upper right", ncol=PLOT_CONFIG["legend_ncol"])
+        _finalize_unique_legend(ax_top, ncol=PLOT_CONFIG["legend_ncol"], loc="upper right")
         # Nach Setzen der Achsenlimits: Optional Kontaktzeit annotieren
         if show_contact_time:
             annotate_impulses_on_axis(ax_top, side_data, forces)
 
         for col in moment_cols:
-            ax_bottom.plot(time, hold_data[col], label=clean_label(col), color=config.COLOR_MAPPING["Mz"])
+            ax_bottom.plot(time, hold_data[col], label=pretty_component("Mz"), color=config.COLOR_MAPPING["Mz"])
         if config.show_title_in_plots:
             ax_bottom.set_title("Moment – " + grip_label)
         ax_bottom.set_xlabel("Time [s]")
@@ -239,7 +310,7 @@ def plot_single_hold_splitview(
                     ivals = contact_time["Mz"]
                     for (t0, t1) in ivals:
                         ax_bottom.axvspan(t0, t1, color=INTERVAL_SHADE_COLOR, alpha=0.15)
-        ax_bottom.legend(loc="upper right", ncol=PLOT_CONFIG["legend_ncol"])
+        _finalize_unique_legend(ax_bottom, ncol=PLOT_CONFIG["legend_ncol"], loc="upper right")
         
         # Beschriftungen und Achsenbegrenzungen setzen
         # Wende Plot-Stil ganz am Ende an, damit alle Änderungen übernommen werden
@@ -321,10 +392,21 @@ def plot_data_per_hold(
         # Aufbau der Figure und Achsen basierend auf Anzahl der dargestellten Griffe
         has_g1 = bool(forces_g1)
         has_g2 = bool(forces_g2)
-        num_axes = has_g1 + has_g2
-        fig_height = 4 * num_axes
+        num_axes = int(has_g1) + int(has_g2)
+        # Guard against empty selections (both sides have no forces)
+        if num_axes == 0:
+            logger.warning("plot_data_per_hold: no forces selected for G1R and G2L; skipping plot.")
+            return
+
+        # Ensure a positive figure height
+        fig_height = max(3.5, 4 * num_axes)
         fig, axes = plt.subplots(num_axes, 1, figsize=(6.3, fig_height), sharex=True)
         axes = [axes] if num_axes == 1 else axes
+        # Helper to fetch the correct axis when only one hold is plotted
+        def _ax_for(side: str):
+            if num_axes == 1:
+                return axes[0]
+            return axes[0] if side == "G2L" else axes[1]
         # === Einfügen des Dateinamens/Identität als Suptitle ===
         file_identity = plot_dict.get("file_identity", filename)
         if config.show_title_in_plots:
@@ -341,36 +423,68 @@ def plot_data_per_hold(
             ax_left.set_xlabel("Time [s]")
             ax_left.set_ylabel("Mz [Nm]")
             combine_legends(ax_left, None, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
+            _finalize_unique_legend(ax_left, ncol=PLOT_CONFIG["legend_ncol"], loc="upper left")
             apply_default_plot_style(fig, normalizebyweight=normalizebyweight)
         else:
             ax_left = axes[0]
             time_left = plot_dict["G2L"]["data"]["Time [s]"]
-            # Falls nur Moment gewünscht: nur Mz darstellen
-            plot_normal_forces(ax_left, plot_dict["G2L"]["data"], forces_g2, color_mapping)
+            df_left = plot_dict["G2L"]["data"]
+            # do not drop FgR_sum; strict matcher prevents accidental inclusion
+            # Plot with pretty labels (mirror right-grip logic)
+            seen_labels = set()
+            selected_forces_left = [f for f in forces_g2 if f != "Mz"]
+            normal_cols_left = [
+                col for col in df_left.columns
+                if any(_col_matches_force(col, f) for f in selected_forces_left)
+            ]
+            for col in normal_cols_left:
+                current_forcen = next((f for f in config.COLOR_MAPPING if f in col), None)
+                base_label = clean_label(col)
+                # Normalize FgR_1 / FgR_2 → FgR for legend (side is not shown in legend)
+                if base_label.startswith("FgR_"):
+                    base_label = "FgR"
+                base_label = base_label.strip()
+                if base_label and base_label not in seen_labels:
+                    legend_label = pretty_component(base_label)
+                    seen_labels.add(base_label)
+                else:
+                    # use leading underscore to hide duplicate entries in legend
+                    legend_label = f"_{pretty_component(base_label)}" if base_label else None
+                ax_left.plot(
+                    time_left,
+                    df_left[col],
+                    label=legend_label,
+                    color=config.COLOR_MAPPING.get(current_forcen)
+                )
             ax_left.set_title("GL")
             # Normalkräfte plotten und y-Grenzen berechnen
-            data_left = plot_dict["G2L"]["data"][[col for col in plot_dict["G2L"]["data"].columns if any(f in col for f in forces_g2)]]
-            if "global_y_limits" in plot_dict.get("G1R", {}) or "global_y_limits" in plot_dict.get("G2L", {}):
-                global_limits = plot_dict.get("G2L", {}).get("global_y_limits") or plot_dict.get("G1R", {}).get("global_y_limits")
-                y_min_left = global_limits["global_y_min"] * 1.2
-                y_max_left = global_limits["global_y_max"] * 1.2
-                try:
-                    ax_left.set_ylim([y_min_left, y_max_left])
-                except Exception as e:
-                    logger.warning(f"Fehler beim Setzen der y-Limits für G2L: {e}")
-                    ax_left.set_ylim([-5, 60])  # Fallback-Werte
-            else:
-                # Robust logic to guard against NaN or Inf in y-limits
+            data_left = df_left[[col for col in df_left.columns if any(f in col for f in forces_g2)]]
+            if num_axes == 1:
+                # Single-hold: compute from plotted data only
                 if not data_left.empty and data_left.notna().any().any():
                     y_min_left, y_max_left = compute_ylimits(data_left, margin=margin, fallback=(-100, 1000))
-                    if not (np.isfinite(y_min_left) and np.isfinite(y_max_left)):
-                        logger.warning("Computed y-limits contain NaN or Inf, skipping set_ylim.")
-                    else:
+                    if np.isfinite(y_min_left) and np.isfinite(y_max_left):
                         ax_left.set_ylim([y_min_left, y_max_left])
                 else:
-                    logger.warning("No valid data in data_left for G2L; skipping ylim setting.")
-            
-            
+                    logger.warning("No valid data for single-hold G2L; using fallback y-limits.")
+                    ax_left.set_ylim([-5, 60])
+            else:
+                if "global_y_limits" in plot_dict.get("G1R", {}) or "global_y_limits" in plot_dict.get("G2L", {}):
+                    global_limits = plot_dict.get("G2L", {}).get("global_y_limits") or plot_dict.get("G1R", {}).get("global_y_limits")
+                    y_min_left = global_limits["global_y_min"] * 1.2
+                    y_max_left = global_limits["global_y_max"] * 1.2
+                    try:
+                        ax_left.set_ylim([y_min_left, y_max_left])
+                    except Exception as e:
+                        logger.warning(f"Fehler beim Setzen der y-Limits für G2L: {e}")
+                        ax_left.set_ylim([-5, 60])
+                else:
+                    if not data_left.empty and data_left.notna().any().any():
+                        y_min_left, y_max_left = compute_ylimits(data_left, margin=margin, fallback=(-100, 1000))
+                        if np.isfinite(y_min_left) and np.isfinite(y_max_left):
+                            ax_left.set_ylim([y_min_left, y_max_left])
+                    else:
+                        logger.warning("No valid data in data_left for G2L; skipping ylim setting.")
             # Optional: Momente auf Sekundärachse anzeigen
             mz_cols = [col for col in plot_dict["G2L"]["data"].columns if "Mz" in col]
             sec_ax_left = None
@@ -380,7 +494,6 @@ def plot_data_per_hold(
                 mz_df_left = plot_dict["G2L"]["data"][mz_cols]
                 y_min_mz_left, y_max_mz_left = compute_ylimits(mz_df_left, margin=margin)
                 sec_ax_left.set_ylim([y_min_mz_left, y_max_mz_left])
-           
             # Optional: Kontaktzeiten als halbtransparente Flächen markieren (nur für die Kontaktzeiten der ersten Kraft)
             if show_interval:
                 contact_time = plot_dict["G2L"].get("contact_time", {})
@@ -391,39 +504,74 @@ def plot_data_per_hold(
                         ax_left.axvspan(t0, t1,
                                         color=INTERVAL_SHADE_COLOR,
                                         alpha=0.15)
-
             # Alle Impulse pro Intervall anzeigen und Kontaktzeit nach letztem Impuls annotieren
             if show_contact_time:
                 annotate_impulses_on_axis(ax_left, plot_dict["G2L"], forces_g2)
-
+            # Ensure x-label is present when plotting a single hold
+            ax_left.set_xlabel("Time [s]")
             # Zusammenführen von Primär- und Sekundär-Legenden
             combine_legends(ax_left, sec_ax_left, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
+            _finalize_unique_legend(ax_left, ncol=PLOT_CONFIG["legend_ncol"], loc="upper left")
         
         # --- Plot für rechten Griff (G1R) ---
         if has_g1:
             if only_mz_g1:
                 mz_cols = [col for col in plot_dict["G1R"]["data"].columns if "Mz" in col]
-                ax_right = axes[1]
+                ax_right = _ax_for("G1R")
                 time_right = plot_dict["G1R"]["data"]["Time [s]"]
                 plot_mz_on_secondary_axis(ax_right, time_right, plot_dict["G1R"]["data"], mz_cols)
                 ax_right.set_ylabel("Mz [Nm]")
+                ax_right.set_xlabel("Time [s]")
                 combine_legends(ax_right, None, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
+                _finalize_unique_legend(ax_right, ncol=PLOT_CONFIG["legend_ncol"], loc="upper left")
             else:
-                ax_right = axes[1]
+                ax_right = _ax_for("G1R")
                 time_right = plot_dict["G1R"]["data"]["Time [s]"]
-                plot_normal_forces(ax_right, plot_dict["G1R"]["data"], forces_g1, color_mapping)
+                df_right = plot_dict["G1R"]["data"]
+                # do not drop FgR_sum; strict matcher prevents accidental inclusion
+                # Plot with pretty labels (mirror left-grip logic)
+                seen_labels = set()
+                selected_forces_right = [f for f in forces_g1 if f != "Mz"]
+                normal_cols_right = [
+                    col for col in df_right.columns
+                    if any(_col_matches_force(col, f) for f in selected_forces_right)
+                ]
+                for col in normal_cols_right:
+                    current_forcen = next((f for f in config.COLOR_MAPPING if f in col), None)
+                    base_label = clean_label(col)
+                    if base_label.startswith("FgR_"):
+                        base_label = "FgR"
+                    base_label = base_label.strip()
+                    if base_label and base_label not in seen_labels:
+                        legend_label = pretty_component(base_label)
+                        seen_labels.add(base_label)
+                    else:
+                        legend_label = f"_{pretty_component(base_label)}" if base_label else None
+                    ax_right.plot(
+                        time_right,
+                        df_right[col],
+                        label=legend_label,
+                        color=config.COLOR_MAPPING.get(current_forcen)
+                    )
 
                 if config.show_title_in_plots:
                     ax_right.set_title("GR")
                 ax_right.set_xlabel("Time [s]")
 
-                # Nach Plotten der Normalkräfte: lokale y-Limits berechnen
-                data_right = plot_dict["G1R"]["data"][[col for col in plot_dict["G1R"]["data"].columns if any(f in col for f in forces_g1)]]
-                y_min_right, y_max_right = compute_ylimits(data_right, margin=margin)
-                y_min_right = plot_dict["G1R"]["global_y_limits"]["global_y_min"]*1.2
-                y_max_right = plot_dict["G1R"]["global_y_limits"]["global_y_max"]*1.2
-
-                ax_right.set_ylim([y_min_right, y_max_right])
+                # Nach Plotten der Normalkräfte: y-Limits berechnen
+                data_right = df_right[[col for col in df_right.columns if any(f in col for f in forces_g1)]]
+                if num_axes == 1:
+                    if not data_right.empty and data_right.notna().any().any():
+                        y_min_right, y_max_right = compute_ylimits(data_right, margin=margin, fallback=(-100, 1000))
+                        if np.isfinite(y_min_right) and np.isfinite(y_max_right):
+                            ax_right.set_ylim([y_min_right, y_max_right])
+                    else:
+                        logger.warning("No valid data for single-hold G1R; using fallback y-limits.")
+                        ax_right.set_ylim([-5, 60])
+                else:
+                    y_min_right = plot_dict["G1R"]["global_y_limits"]["global_y_min"]*1.2
+                    y_max_right = plot_dict["G1R"]["global_y_limits"]["global_y_max"]*1.2
+                    ax_right.set_ylim([y_min_right, y_max_right])
                 # Falls Mz aktiv ist, plotte zusätzlich Mz auf einer Sekundärachse
                 mz_cols = [col for col in plot_dict["G1R"]["data"].columns if "Mz" in col]
                 sec_ax_right = None
@@ -448,13 +596,21 @@ def plot_data_per_hold(
                 if show_contact_time:
                     annotate_impulses_on_axis(ax_right, plot_dict["G1R"], forces_g1, labeloffset=2)
                 combine_legends(ax_right, sec_ax_right, loc="upper left", ncol=PLOT_CONFIG["legend_ncol"])
+                _finalize_unique_legend(ax_right, ncol=PLOT_CONFIG["legend_ncol"], loc="upper left")
         # Zeitbereich mit kleinem Puffer setzen, damit Linien nicht abgeschnitten werden
-        time_min = min(time_left.min(), time_right.min()) if has_g1 else time_left.min()
-        time_max = max(time_left.max(), time_right.max()) if has_g1 else time_left.max()
-        time_range = time_max - time_min
-        axes[0].set_xlim([time_min - 0.01 * time_range, time_max + 0.05 * time_range])
-        if has_g1:
-            axes[1].set_xlim([time_min - 0.01 * time_range, time_max + 0.05 * time_range])
+        # Zeitbereich mit kleinem Puffer setzen, robust bei Single-Hold
+        if has_g2 and has_g1:
+            time_min = min(time_left.min(), time_right.min())
+            time_max = max(time_left.max(), time_right.max())
+            for i in range(2):
+                rng = time_max - time_min
+                axes[i].set_xlim([time_min - 0.01 * rng, time_max + 0.05 * rng])
+        elif has_g2:
+            rng = time_left.max() - time_left.min()
+            axes[0].set_xlim([time_left.min() - 0.01 * rng, time_left.max() + 0.05 * rng])
+        elif has_g1:
+            rng = time_right.max() - time_right.min()
+            _ax_for("G1R").set_xlim([time_right.min() - 0.01 * rng, time_right.max() + 0.05 * rng])
         
         plt.tight_layout()
 
@@ -576,8 +732,8 @@ def _plot_impulses_bar_split(ax1, ax2, indices_g1, filtered_names_g1, filtered_g
     
     # Achsenbeschriftungen
     if config.show_title_in_plots:
-        ax1.set_title(f"{title} – {force} – GL")
-        ax2.set_title(f"{title} – {force} – GR")
+        ax1.set_title(f"{title} – {pretty_component(force)} – GL")
+        ax2.set_title(f"{title} – {pretty_component(force)} – GR")
     ax2.set_ylabel(f"Impuls P{direction} {y_title}")
     ax1.set_xticks(indices_g2)
     ax1.set_xticklabels([config.file_acronyms_map.get(name, name) for name in filtered_names_g2], rotation=25, ha="right")
@@ -639,7 +795,7 @@ def _plot_impulses_bar_combined(ax, indices, filtered_names, filtered_g1, filter
     ax.set_xticklabels([config.file_acronyms_map.get(name, name) for name in filtered_names], rotation=25, ha="right")
     ax.set_ylabel(f"Impuls P{direction} {y_title}")
     if config.show_title_in_plots:
-        ax.set_title(f"{title} – {force}")
+        ax.set_title(f"{title} – {pretty_component(force)}")
     ax.legend()
 
     # Werte und Kontaktzeiten als kleine Texte direkt über den Balken anzeigen
@@ -664,9 +820,32 @@ def plot_mean_metrics_bar(
     title: str = "Mean",
     save_plot: bool = False,
     save_folder: str = ".",
-    normalizebyweight= bool(True),
-    split_view= False,  # True: separate plots for G1R and G2L
+    normalizebyweight: bool = True,
+    split_view: bool = False,  # True: separate plots for G1R and G2L
+    error_bars: Optional[str] = "std",  # None | "std" | "sem" | "ci95"
+    error_capsize: float = 3.0,
 ) -> None:
+    """
+    Create grouped bar plots for selected forces and an optional metric.
+
+    New: If `error_bars` is not None, compute error bars directly from per-interval
+    values located at: content[side]["intervals"][I*][force][characteristic].
+    For Contact Time, values are computed from `interval_timing` as (t1 - t0).
+
+    Args:
+        all_lvm_data_dict: Master dict per file.
+        forces: List of forces to plot (e.g., ["Fy", "Fz", "FgR"]).
+        metric: Characteristic key to read for each force (e.g., "impuls", "max").
+        side: "G2L" or "G1R".
+        figsize: Figure size.
+        title: Plot title.
+        save_plot: Whether to save figure.
+        save_folder: Destination folder.
+        normalizebyweight: If True, uses %BW units.
+        split_view: Unused here (kept for API compatibility).
+        error_bars: Type of error bar to compute from intervals: None, "std", "sem", or "ci95".
+        error_capsize: Size of error bar caps.
+    """
     import matplotlib.pyplot as plt
     import numpy as np
     import os
@@ -677,7 +856,9 @@ def plot_mean_metrics_bar(
     # Map GUI-friendly names to data keys depending on side
     mapped_forces = []
     for f in forces:
-        if f == "FgR":
+        if f == "Fres_xyz_sum":
+            mapped_forces.append(f)
+        elif f == "FgR":
             if side == "G2L":
                 mapped_forces.append("FgR_2")
             elif side == "G1R":
@@ -685,9 +866,75 @@ def plot_mean_metrics_bar(
         else:
             mapped_forces.append(f)
 
-    labels, plot_data = [], []
+    labels, plot_data, error_data = [], [], []
+    file_keys: List[str] = []
 
-    is_contact_time = metric.lower() == "contact time" or "Contacttime" in metric
+    metric_lower = metric.lower()
+    norm_metric = "".join(ch for ch in metric_lower if ch.isalnum())
+    is_contact_time = norm_metric.startswith("contacttime") or norm_metric in {"tcontact", "contactduration"}
+
+    # Helper: collect per-interval values for a given file/force/metric
+    def _interval_values(content: Dict[str, Any], side_key: str, force_key: str) -> List[float]:
+        vals: List[float] = []
+        intervals = content.get(side_key, {}).get("intervals", {})
+        # Sort keys to ensure stable order (I1, I2, ...)
+        for ik in sorted([k for k in intervals.keys() if k.lower().startswith("i")],
+                         key=lambda x: int(''.join([c for c in x if c.isdigit()]) or '0')):
+            ival = intervals.get(ik, {})
+            if is_contact_time:
+                # Prefer explicit duration fields per interval (e.g., I1_/duration_s)
+                duration_keys = ["duration_s", "contact_time_s", "ct_s", "duration", "contacttime", "tcontact"]
+                dur_val = None
+                for dk in duration_keys:
+                    if dk in ival:
+                        try:
+                            dur_val = float(ival[dk])
+                            break
+                        except Exception:
+                            pass
+                # Fallback: compute from interval_timing if provided
+                if dur_val is None:
+                    timing = ival.get("interval_timing")
+                    if timing and isinstance(timing, (list, tuple)) and len(timing) == 2:
+                        try:
+                            dur_val = float(timing[1]) - float(timing[0])
+                        except Exception:
+                            dur_val = None
+                if dur_val is not None and not np.isnan(dur_val):
+                    vals.append(dur_val)
+                continue
+            else:
+                fdict = ival.get(force_key, {})
+                # Special fallback for Fres_xyz_sum: if not found, try Fres_xyz
+                if not fdict and force_key == "Fres_xyz_sum":
+                    fdict = ival.get("Fres_xyz", {})
+                if isinstance(fdict, dict):
+                    # try direct key and common variants
+                    for key_try in [metric_lower, metric, metric_lower.replace(" ", ""), metric.replace(" ", "")]:
+                        if key_try in fdict:
+                            try:
+                                vals.append(float(fdict[key_try]))
+                            except Exception:
+                                pass
+                            break
+        return [v for v in vals if v is not None and not np.isnan(v)]
+    
+    def _color_for_file_by_fh(fname: str) -> str:
+        """
+        Pick a bar color for Contact Time based on filename markers using config.COLOR_MAPPING_FH.
+        Any substring match like '-w-', '-b-', '-m-' (case-insensitive) in the filename chooses the mapped color.
+        Falls back to 'black' if no mapping or match is found.
+        """
+        try:
+            mapping = getattr(config, "COLOR_MAPPING_FH", {})
+            name = str(fname).lower()
+            # Ensure deterministic match order: iterate over mapping items as defined
+            for key, color in mapping.items():
+                if str(key).lower() in name:
+                    return color
+        except Exception:
+            pass
+        return "black"
     # optinol for choosing order of files.
     if config.use_custom_bar_order:
         ordered_keys = []
@@ -701,88 +948,158 @@ def plot_mean_metrics_bar(
                 ordered_keys.append(match)
     else:
         ordered_keys = list(all_lvm_data_dict.keys())
+
+    compute_from_intervals = error_bars is not None
+
     for fname in ordered_keys:
         content = all_lvm_data_dict[fname]
         mean_metrics = content.get(side, {}).get("intervals", {}).get("Mean-Metrics", {})
-        if not mean_metrics:
-            print(f"⚠️ Kein 'Mean-Metrics' für {side} in Datei: {fname}")
-            print(json.dumps(content.get(side, {}).get("intervals", {}), indent=2))
-            continue
+        row_vals, row_errs = [], []
 
         if is_contact_time:
-            val_entry = mean_metrics.get("Contacttime", {})
-            val = val_entry.get("mean", np.nan)
-            plot_data.append([val])
-            file_number = fname[:3]
-            labels.append(config.file_acronyms_map.get(file_number, file_number))
-        else:
-            row = []
-            for force in mapped_forces:
-                val_entry = mean_metrics.get(force, None)
-                if isinstance(val_entry, dict) and metric in val_entry:
-                    val = val_entry[metric]
-                elif isinstance(val_entry, (int, float)) and metric == "mean":
-                    val = val_entry
+            if compute_from_intervals:
+                vals = _interval_values(content, side, force_key="__ct__")  # special branch ignores force_key
+                if len(vals) == 0:
+                    mean_val = np.nan
+                    err_val = np.nan
                 else:
-                    val = None
-                row.append(val if val is not None else np.nan)
-            plot_data.append(row)
-            file_number = fname[:3]
-            labels.append(config.file_acronyms_map.get(file_number, file_number))
+                    mean_val = float(np.nanmean(vals))
+                    if error_bars == "std":
+                        err_val = float(np.nanstd(vals, ddof=1)) if len(vals) > 1 else 0.0
+                    elif error_bars == "sem":
+                        std = float(np.nanstd(vals, ddof=1)) if len(vals) > 1 else 0.0
+                        err_val = std / np.sqrt(len(vals)) if len(vals) > 0 else np.nan
+                    elif error_bars == "ci95":
+                        std = float(np.nanstd(vals, ddof=1)) if len(vals) > 1 else 0.0
+                        sem = std / np.sqrt(len(vals)) if len(vals) > 0 else np.nan
+                        err_val = 1.96 * sem if sem is not np.nan else np.nan
+                    else:
+                        err_val = np.nan
+                row_vals.append(mean_val)
+                row_errs.append(err_val)
+            else:
+                # fall back to Mean-Metrics
+                val_entry = mean_metrics.get("Contacttime", {})
+                val = val_entry.get("mean", np.nan)
+                row_vals.append(val)
+                row_errs.append(np.nan)
+        else:
+            for force in mapped_forces:
+                if compute_from_intervals:
+                    vals = _interval_values(content, side, force)
+                    if len(vals) == 0:
+                        mean_val = np.nan
+                        err_val = np.nan
+                    else:
+                        mean_val = float(np.nanmean(vals))
+                        if error_bars == "std":
+                            err_val = float(np.nanstd(vals, ddof=1)) if len(vals) > 1 else 0.0
+                        elif error_bars == "sem":
+                            std = float(np.nanstd(vals, ddof=1)) if len(vals) > 1 else 0.0
+                            err_val = std / np.sqrt(len(vals)) if len(vals) > 0 else np.nan
+                        elif error_bars == "ci95":
+                            std = float(np.nanstd(vals, ddof=1)) if len(vals) > 1 else 0.0
+                            sem = std / np.sqrt(len(vals)) if len(vals) > 0 else np.nan
+                            err_val = 1.96 * sem if sem is not np.nan else np.nan
+                        else:
+                            err_val = np.nan
+                    row_vals.append(mean_val)
+                    row_errs.append(err_val)
+                else:
+                    # Use precomputed Mean-Metrics if available
+                    val_entry = mean_metrics.get(force, None)
+                    if isinstance(val_entry, dict) and metric in val_entry:
+                        val = val_entry[metric]
+                    elif isinstance(val_entry, (int, float)) and metric == "mean":
+                        val = val_entry
+                    else:
+                        val = np.nan
+                    row_vals.append(val)
+                    row_errs.append(np.nan)
+
+        plot_data.append(row_vals)
+        error_data.append(row_errs)
+        file_number = fname[:3]
+        labels.append(config.file_acronyms_map.get(file_number, file_number))
+        file_keys.append(fname)
 
     # Check if plot_data is empty before proceeding
     if not plot_data:
         print(f"Keine gültigen Daten für {side}, Diagramm wird übersprungen.")
         return
 
-    plot_data = np.array(plot_data)
+    plot_data = np.array(plot_data, dtype=float)
+    error_data = np.array(error_data, dtype=float)
     if plot_data.ndim == 1:
         plot_data = plot_data[:, np.newaxis]
+        error_data = error_data[:, np.newaxis]
     x = np.arange(len(labels))
     width = 0.8 / plot_data.shape[1]
 
     fig, ax = plt.subplots(figsize=figsize)
     for i in range(plot_data.shape[1]):
-        if metric.lower() == "impuls":
+        if metric_lower == "impuls":
             force_label = forces[i]
             base_key = force_label.replace("F", "P", 1)
             color_key = force_label  # use F* as color source
         elif is_contact_time:
-            base_key = r"$t{\mathrm{contact}}$"
-            color_key = base_key
+            base_key = "Contact time"
+            color_key = "Contacttime"  # try a friendly key first
         else:
             base_key = forces[i]
             color_key = base_key
-        color = config.COLOR_MAPPING.get(color_key, "black")
-        ax.bar(x + i * width, plot_data[:, i], width, label=base_key, color=color)
+        # Determine bar colors
+        if is_contact_time:
+            # Per-file colors based on filename markers from config.COLOR_MAPPING_FH (e.g., '-w-', '-b-', '-m-')
+            colors_list = [_color_for_file_by_fh(k) for k in file_keys]
+            color = None  # not used when colors_list is provided
+        else:
+            colors_list = None
+            color = config.COLOR_MAPPING.get(color_key, "black")
+
+        yerr = error_data[:, i] if error_bars is not None else None
+        # Error bar color: orange for contact time, grey otherwise
+        err_color = "orange" if is_contact_time else "#373535"
+        # Use pretty_component for force labels where possible; leave mathtext labels (e.g., contact time) as-is
+        if is_contact_time:
+            base_key = "Contact time"
+        legend_label = base_key if isinstance(base_key, str) and base_key.startswith("$") else pretty_component(base_key)
+        ax.bar(
+            x + i * width,
+            plot_data[:, i],
+            width,
+            label=legend_label,
+            color=colors_list if is_contact_time else color,
+            yerr=yerr,
+            capsize=error_capsize,
+            ecolor=err_color,
+            error_kw={"elinewidth": 0.8, "ecolor": err_color}
+        )
 
     # Dynamischer Y-Achsentitel je nach Metrik
-    metric_lower = metric.lower()
     if normalizebyweight:
         if metric_lower == "impuls":
             ylabel = r"P [%BWs]"
         elif metric_lower == "maxrofd":
             ylabel = r"∆F / ∆t [%BW/s]"
-        elif metric_lower in ["contact time", "contacttime"]:
-            ylabel = "Time [s]"
-        elif metric_lower =="max":
+        elif is_contact_time:
+            ylabel = "Contact time [s]"
+        elif metric_lower == "max":
             ylabel = r"F [%BW]"
-        elif metric_lower =="hausdorff":
+        elif metric_lower == "hausdorff":
             ylabel = "HD"
         else:
             ylabel = r"F [%BW]"
-            
-
     else:
         if metric_lower == "impuls":
             ylabel = "P [Ns]"
         elif metric_lower == "maxrofd":
             ylabel = "∆F / ∆t [N/s]"
-        elif metric_lower in ["contact time", "contacttime"]:
-            ylabel = "Time [s]"
-        elif metric_lower =="max":
+        elif is_contact_time:
+            ylabel = "Contact time [s]"
+        elif metric_lower == "max":
             ylabel = "F [N]"
-        elif metric_lower =="hausdorff":
+        elif metric_lower == "hausdorff":
             ylabel = "HD"
         else:
             ylabel = "F [N]"
@@ -790,19 +1107,76 @@ def plot_mean_metrics_bar(
     ax.set_ylabel(ylabel)
     if config.show_title_in_plots:
         ax.set_title(f"{title} ({side})")
+
+    # Determine y-limits. If manual limits are set, use those. Otherwise, use
+    # the maximum (and minimum) among all relevant *interval* values so the bars
+    # fit beneath a limit that reflects peak interval magnitudes, not only the means.
     if config.manual_y_limits_var:
         y_min = config.plot_settings["y_limits"][0]
         y_max = config.plot_settings["y_limits"][1]
-     
     else:
-        y_min = plot_data.min().min()/1.05
-        y_max = plot_data.max().max()*1.1
-    y_min = 0
+        interval_vals_all = []
+        # Collect interval values across all selected files and forces for this side
+        try:
+            for fname in ordered_keys:
+                content = all_lvm_data_dict[fname]
+                if is_contact_time:
+                    # special branch ignores force_key
+                    interval_vals_all.extend(_interval_values(content, side, "__ct__"))
+                else:
+                    for force in mapped_forces:
+                        interval_vals_all.extend(_interval_values(content, side, force))
+        except Exception:
+            # If anything goes wrong collecting intervals, fall back to bar data
+            interval_vals_all = []
+
+        if len(interval_vals_all) > 0:
+            # Use interval extrema to set y-limits
+            try:
+                arr = np.asarray(interval_vals_all, dtype=float)
+                arr = arr[~np.isnan(arr)]
+                if arr.size > 0:
+                    interval_min = float(np.nanmin(arr))
+                    interval_max = float(np.nanmax(arr))
+                else:
+                    interval_min, interval_max = 0.0, 1.0
+            except Exception:
+                interval_min, interval_max = 0.0, 1.0
+
+            # Ensure sensible framing around zero (important if any metric can be < 0)
+            base_min = min(0.0, interval_min)
+            base_max = max(0.0, interval_max)
+            # Add 10% headroom; ensure non-degenerate range
+            if base_max == base_min:
+                y_min, y_max = (0.0, base_max * 1.1 if base_max != 0 else 1.0)
+            else:
+                pad = 0.1 * (base_max - base_min)
+                y_min = base_min - pad * 0.0  # keep zero baseline unless negatives exist
+                y_max = base_max + pad
+                # Force baseline to 0 unless negatives are present
+                if interval_min >= 0:
+                    y_min = 0.0
+        else:
+            # Fallback: derive from plotted bar values (means)
+            try:
+                y_min = float(np.nanmin(plot_data))
+                y_max = float(np.nanmax(plot_data))
+            except ValueError:
+                y_min, y_max = 0.0, 1.0
+            if not np.isfinite(y_min):
+                y_min = 0.0
+            if not np.isfinite(y_max):
+                y_max = 1.0
+            # Bars in these plots are typically non-negative; fix baseline at 0
+            y_min = 0.0
+            y_max = y_max * 1.1 if y_max != 0 else 1.0
+
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=25) 
-    ax.set_ylim([y_min,y_max])
+    ax.set_xticklabels(labels, rotation=25)
+    ax.set_ylim([y_min, y_max])
     ax.legend(loc='upper right', ncol=PLOT_CONFIG["legend_ncol"])
     plt.tight_layout()
+
     if save_plot:
         safe_title = title.replace(":", "_").replace(" ", "_")
         path = os.path.join(save_folder, f"{safe_title}_{side}{config.optional_suffix}.png")
@@ -810,7 +1184,7 @@ def plot_mean_metrics_bar(
         os.makedirs(os.path.dirname(path), exist_ok=True)
         plt.savefig(path)
         print(f"Plot gespeichert unter: {path}")
-    
+
     plt.show()
 
 
@@ -919,7 +1293,7 @@ def plot_FgR_sum(
         time = df["Time [s]"]
         
         # FgR_sum immer plotten
-        ax.plot(time, df["FgR_sum [%]"], label="FgR_sum", color=config.COLOR_MAPPING.get("FgR_sum", "black"), linewidth=1.2)
+        ax.plot(time, df["FgR_sum [%]"], label=pretty_component("FgR_sum"), color=config.COLOR_MAPPING.get("FgR_sum", "black"), linewidth=1.2)
 
         # Optional: Weitere Kräfte aus G1R und G2L
         for side, forces in [("G1R", forces_g1), ("G2L", forces_g2)]:
@@ -941,7 +1315,7 @@ def plot_FgR_sum(
                     ax.plot(
                         side_df["Time [s]"],
                         side_df[col],
-                        label=f"{clean_label(col)} ({'R' if side == 'G1R' else 'L'})",
+                        label=f"{pretty_component(clean_label(col))} ({'R' if side == 'G1R' else 'L'})",
                         color=color,
                         alpha=0.7
                     )

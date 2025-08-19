@@ -89,9 +89,41 @@ def parse_metadata_from_filename(file_name):
     return result
 
 def split_grip_sides(df):
-    g1r = df[["Time [s]"] + ["FgR_sum [%]"] + [col for col in df.columns if "1" in col]]
-    g2l = df[["Time [s]"] + ["FgR_sum [%]"]+ [col for col in df.columns if "2" in col]]
+    base_cols = ["Time [s]"]
+    # include global sum columns if present (analog to FgR_sum)
+    sum_cols = []
+    for name in [
+        "FgR_sum [%]",
+        "Fy_sum [%]", "Fz_sum [%]", "Fx_sum [%]",
+        "Fy_sum [N]", "Fz_sum [N]", "Fx_sum [N]",
+        "Fres_xyz_sum [%]", "Fres_yz_sum [%]",
+          "Fres_xyz_sum [N]", "Fres_yz_sum [N]"
+    ]:
+        if name in df.columns:
+            sum_cols.append(name)
+    g1r = df[base_cols + sum_cols + [col for col in df.columns if "1" in col]]
+    g2l = df[base_cols + sum_cols + [col for col in df.columns if "2" in col]]
     return g1r, g2l
+ # --- Neue Funktion: Summenspalten für Fy, Fz, Fx ---
+
+def calc_force_sums(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Fügt dem übergebenen DataFrame neue Spalten 'Fy_sum [*]', 'Fz_sum [*]', 'Fx_sum [*]' hinzu.
+    Die Einheit * entspricht der Einheit der Eingabespalten ("[N]" oder "[%]").
+    Es wird jeweils die erste passende Spalte mit _1 und _2 verwendet, wenn vorhanden.
+    """
+    def _add_sum(forcename: str, unit: str):
+        c1 = next((col for col in df.columns if col == f"{forcename}_1 {unit}"), None)
+        c2 = next((col for col in df.columns if col == f"{forcename}_2 {unit}"), None)
+        if c1 and c2:
+            sum_col = f"{forcename}_sum {unit}"
+            df[sum_col] = df[c1] + df[c2]
+
+    # zuerst Prozent, dann Newton
+    for unit in ("[%]", "[N]"):
+        for comp in ("Fy", "Fz", "Fx", "Fres_xyz"):
+            _add_sum(comp, unit)
+    return df
 
 
 # --- Datenberechnung ---
@@ -121,12 +153,12 @@ def compute_contact_times(file_data: Dict, force_keys: List[str]) -> None:
 
         file_data[side]["contact_time"] = contact_times
         # Ensure all forces in force_keys share the same contact intervals
-        primary_force = "Fz" if "Fz" in contact_times else next(iter(contact_times), None)
+        primary_force = "Fy" if "Fy" in contact_times else next(iter(contact_times), None)
         if primary_force:
             shared_times = contact_times[primary_force]
             for force in force_keys:
-                if force not in contact_times:
-                    contact_times[force] = shared_times
+                contact_times[force] = shared_times[:]  # Kopie, kein Alias
+
         #print(f"{side} contact times:", {k: v for k, v in contact_times.items()})
 
 def compute_impulses(file_data: Dict, force_keys: List[str]) -> None:
@@ -169,15 +201,24 @@ def compute_impulses(file_data: Dict, force_keys: List[str]) -> None:
 
 
 
-# --- Neue Funktion: Kraftstatistiken pro Kontaktintervall ---
 def compute_interval_force_stats(file_data: Dict) -> None:
     """
     Berechnet Min, Max, Mittelwert und Impuls, hausdorff für Fx, Fy, Fz innerhalb jedes Kontaktintervalls.
     Speichert die Ergebnisse unter file_data[side]["intervals"]["I1"], ["I2"], ...
     Vor der Berechnung werden ungültige Intervalle entfernt (basierend auf config.invalid_intervals_list).
     Nach der Berechnung werden die Zeitbereiche der ungültigen Intervalle auch aus dem DataFrame entfernt.
-    """
-    from utils import compute_impulses_per_contact  # ensure this import is present at top of file
+    """  # ensure this import is present at top of file
+    file_name = file_data.get("file_name", "")
+    excluded_intervals_dict_local = dict(config.excluded_intervals_dict)
+    for key in excluded_intervals_dict_local:
+        if key in file_name:
+            excluded = excluded_intervals_dict_local[key]
+            config.invalid_intervals_list = excluded.copy()
+            print(f"    Matched key '{key}' in file name '{file_name}' – setting invalid_intervals_list = {excluded}")
+            break
+    print("\nexecuting compute_interval_force_stats")
+    print("DEBUG: invalid_intervals_list = ", config.invalid_intervals_list)
+
     for side in ["G1R", "G2L"]:
         df = file_data[side]["data"]
         intervals = file_data[side]["contact_time"].get("Fz", [])
@@ -196,19 +237,29 @@ def compute_interval_force_stats(file_data: Dict) -> None:
             "Fres_xyz": "Pxyz",
             "Fres_yz": "Pyz",
             "FgR_sum": "Psum",
+            "Fy_sum": "Py_sum",
+            "Fz_sum": "Pz_sum",
+            "Fx_sum": "Px_sum",
             "FgR_1": "Pgr1",
-            "FgR_2": "Pgr2"
+            "FgR_2": "Pgr2",
+            "Fres_xyz_sum": "Pxyz_sum",
         }
         interval_stats = {}
         file_number = file_data.get("file_number", "000")
-        # Loop over all intervals and store invalid segments before continue
+        # --- Prepare valid_intervals list ---
+        valid_intervals = [
+            (i, t0, t1)
+            for i, (t0, t1) in enumerate(intervals)
+            if (i + 1) not in config.invalid_intervals_list
+        ]
+        # First, store invalid intervals' segments
         for i, (t0, t1) in enumerate(intervals):
             if (i + 1) in config.invalid_intervals_list:
                 mask = (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
                 segment = df.loc[mask]
                 file_data["invalid_intervals"][side][f"I{i+1}"] = segment.to_dict(orient="list")
-                continue
-            # For valid intervals, define mask/segment here
+        # Now, process only valid intervals
+        for i, t0, t1 in valid_intervals:
             mask = (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
             segment = df.loc[mask]
             current_interval = f"I{i+1}"
@@ -217,11 +268,24 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                 "duration_s": round(t1 - t0, 3)
             }
             for force in force_map:
-                # Only select columns that have the force 
-                if force == "FgR_sum":
-                    force_cols = [col for col in df.columns if col.startswith("FgR_sum")]
+                if force.endswith("_sum"):
+                    # Sum-Kanäle: exakte Präfix-Übereinstimmung (z.B. "Fy_sum [%]")
+                    force_cols = [
+                        col for col in df.columns
+                        if col.startswith(f"{force} ") or col == force
+                    ]
+                elif force in ("Fy", "Fz", "Fx", "Mz", "FgR", "Fres_xyz", "Fres_yz"):
+                    # Basis-Kräfte: nur seiten-spezifische Kanäle (und NICHT *_sum)
+                    force_cols = [
+                        col for col in df.columns
+                        if col.startswith(f"{force}_1 ") or col.startswith(f"{force}_2 ")
+                    ]
+                elif force in ("FgR_1", "FgR_2"):
+                    suf = "1" if force.endswith("_1") else "2"
+                    force_cols = [col for col in df.columns if col.startswith(f"FgR_{suf} ")]
                 else:
-                    force_cols = [col for col in df.columns if force in col]
+                    # Fallback: exakter Präfix vor Einheit
+                    force_cols = [col for col in df.columns if col.startswith(f"{force} ")]
                 if force_cols:
                     force_cols = [force_cols[0]]
                     series = segment[force_cols[0]]
@@ -236,8 +300,8 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                     else:
                         maxROFD = None
                     force_dict = {
-                        "min": round(series.min(), 1),
-                        "max": round(series.max(), 1),
+                        "min": round(np.abs(series).min(), 1),
+                        "max": round(np.abs(series).max(), 1),
                         "mean": round(series.mean(), 1),
                         "impuls": round(impulse, 1),
                         "maxROFD": round(maxROFD, 2) if maxROFD is not None else None,
@@ -247,8 +311,8 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                     }
                     stats_entry[force] = force_dict
                     stats_entry[force_map[force]] = round(impulse, 1)
-            interval_stats[f"I{i+1}"] = stats_entry
             stats_entry["interval_data"] = segment.to_dict(orient="list")
+            interval_stats[f"I{i+1}"] = stats_entry
         # Mittelwerte über alle Intervalle hinweg berechnen
         mean_metrics = {}
         all_force_data = {}
@@ -281,6 +345,8 @@ def compute_interval_force_stats(file_data: Dict) -> None:
             if (i + 1) in config.invalid_intervals_list:
                 df.drop(df[(df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)].index, inplace=True)
         df.reset_index(drop=True, inplace=True)
+        
+
 
 def calc_FgR(current_dict):
     """
@@ -316,26 +382,41 @@ def calc_resultant_fy_fz(current_dict):
     for file_data in current_dict.values():
         for side in ["G1R", "G2L"]:
             df = file_data[side]["data"]
-            fy_cols = [col for col in df.columns if "Fy" in col]
-            fz_cols = [col for col in df.columns if "Fz" in col]
-            fx_cols = [col for col in df.columns if "Fx" in col]
+            side_suffix = "_1" if side == "G1R" else "_2"
 
-            if fy_cols and fz_cols:
-                fy = df[fy_cols[0]]
-                fz = df[fz_cols[0]]
-                Fres_yz = np.sqrt(fy**2 + fz**2)
-                if fx_cols:
-                    fx = df[fx_cols[0]]
-                    Fres_xyz = np.sqrt(fy**2 + fz**2 + fx**2)
-                else:
-                    Fres_xyz = None
-                    print(f"Keine Fx-Spalte in {side} gefunden. Fres_xyz wird nicht berechnet.")
-                angle = np.rad2deg(np.arctan2(fz, fy))  # Winkel in Grad
-                phiyz = angle - 40  # Bezug zur Senkrechten (Wandwinkel)
+            # Select side-specific columns only (avoid *_sum and other side)
+            def pick(col_prefix: str):
+                candidates = [c for c in df.columns if c.startswith(f"{col_prefix}{side_suffix} ")]
+                return candidates[0] if candidates else None
 
-                df.loc[:, "Fres_yz"] = Fres_yz
-                df.loc[:, "Fres_xyz"] = Fres_xyz
-                df.loc[:, "φ_yz"] = phiyz
+            fy_col = pick("Fy")
+            fz_col = pick("Fz")
+            fx_col = pick("Fx")
+
+            if not (fy_col and fz_col):
+                print(f"[calc_resultant_fy_fz] Missing Fy/Fz for {side} → skipping resultant.")
+                continue
+
+            # Determine unit from the picked column name
+            unit_suffix = " [%]" if "[%]" in fy_col else " [N]"
+
+            fy = df[fy_col]
+            fz = df[fz_col]
+            Fres_yz = np.sqrt(fy**2 + fz**2)
+
+            Fres_xyz = None
+            if fx_col is not None:
+                fx = df[fx_col]
+                Fres_xyz = np.sqrt(fy**2 + fz**2 + fx**2)
+
+            angle = np.rad2deg(np.arctan2(fz, fy))  # Winkel in Grad
+            phiyz = angle - 40  # Bezug zur Senkrechten (Wandwinkel)
+
+            df.loc[:, f"Fres_yz{side_suffix}{unit_suffix}"] = Fres_yz
+            if Fres_xyz is not None:
+                df.loc[:, f"Fres_xyz{side_suffix}{unit_suffix}"] = Fres_xyz
+            df.loc[:, f"φ_yz{side_suffix}{unit_suffix}"] = phiyz
+
 
 
 # --- Datenfilterung & Verarbeitung ---
@@ -494,6 +575,8 @@ def process_single_lvm_file(file_path, settings):
     """
     if config.deebug_mode:
         print(f"Calculating file: {file_path}")
+    print(f"\n--- Processing new file: {file_path}")
+    print(f"→ Before setting: current invalid_intervals_list = {config.invalid_intervals_list}")
     # === 1. Settings einlesen ===
     SVGwindowlength = settings.get("SVGwindowlength")
     SVGpolyorder = settings.get("SVGpolyorder")
@@ -507,26 +590,18 @@ def process_single_lvm_file(file_path, settings):
     df = prepare_time_column(df, autotrim=autotrim)
 
     file_name = os.path.splitext(os.path.basename(file_path))[0]
-    # --- Auto-skip interval 2 for specific files ---
-    if file_name.startswith("017-Shoes-3_1_FH-best_Sh-trail_TK-front"):
-        if 2 not in config.invalid_intervals_list:
-            config.invalid_intervals_list.append(2)
     metadata = parse_metadata_from_filename(file_name)
     athlete_name = metadata["athlete"]
     kgclimber = metadata["weight"]
     climberforce = kgclimber * 9.81
     file_identity = metadata["identity"]
-    
-    # Append excluded intervals from config if key is contained in file_name
-    for key in config.excluded_intervals_dict:
-        if key in file_name:
-            excluded = config.excluded_intervals_dict[key]
-            config.invalid_intervals_list.extend([i for i in excluded if i not in config.invalid_intervals_list])
 
     # === 2. Rohdatenverarbeitung ===
     clean_df = clean_data(df) # remove X_Value, comments and U_data
     clean_df = trim_low_force_periods(clean_df, threshold=10, min_duration=3, buffer=2)
     clean_df = calc_fgr_sum(clean_df)
+    # Summen für Fy, Fz, Fx ergänzen
+    clean_df = calc_force_sums(clean_df)
 
     # === 3. Griffseitentrennung und Trimmung ===
     g1r, g2l = split_grip_sides(clean_df)
@@ -575,7 +650,10 @@ def process_single_lvm_file(file_path, settings):
     temp_dict = {file_name: file_data}
     calc_resultant_fy_fz(temp_dict)
     file_data = temp_dict[file_name]
+    # Summe der Resultierenden hinzufügen
+    calc_fres_xyz_sum_in_filedata(file_data)
 
+    file_data["file_name"] = file_name
     return file_name, file_data, clean_df_trimmed
 
 
@@ -596,6 +674,7 @@ def finalize_file_export(file_data, fname, folder_path, save_plot):
     compute_impulses(file_data, force_keys)
     if config.plot_settings["export_data"]:
         export_data_to_excel(file_data, fname, folder_path)
+    reset_invalid_intervals_from_gui()
     # if save_plot:
     #     export_impulse_data(file_data, fname, folder_path)
 
@@ -609,11 +688,11 @@ def load_lvm_data(folder_path, *, settings, export=False) -> Dict[str, Dict[str,
 
     file_paths = sorted([fp for fp in glob.glob(os.path.join(folder_path, "*.lvm")) if "MAX" not in os.path.basename(fp)])
     for file_path in file_paths:
-        print("loading: ",file_path)
+       # print("\n--loading NEW FILE: \n",file_path)
         
         file_name, file_data, clean_df_trimmed = process_single_lvm_file(file_path, settings)
       #  config.file_number = file_name[:3]  # Set file_number from filename
-        print("in load_lvm_data_config.file_number = ",config.file_number)
+       # print("in load_lvm_data_config.file_number = ",config.file_number)
         data_dict[file_name] = file_data
 
     # Export und finale Berechnungen pro Datei
@@ -636,8 +715,11 @@ def load_lvm_data(folder_path, *, settings, export=False) -> Dict[str, Dict[str,
         if "invalid_intervals" in content:
             exportable_dict[fname]["invalid_intervals"] = content["invalid_intervals"]
     if export:
-        filename = "_".join(config.processed_files_list) + config.optional_suffix+"_summary.json"
+        # Exportiere die Daten als JSON-Datei
+        filename = "_".join(config.processed_files_list) +config.filter_suffix+config.NBW+ "_summary.json"
         output_path = os.path.join(folder_path, filename)
+       # config.file_number = ""
+        config.processed_files_list = []
         try:
             with open(output_path, "w") as f:
                 json.dump(exportable_dict, f, indent=2)
@@ -666,6 +748,13 @@ def normalize_forces_by_weight(df, climberforce):
                 df[col] = (df[col] / climberforce) * 100
                 new_col = col.replace("[N]", "[%]")
                 df.rename(columns={col: new_col}, inplace=True)
+        # Nach der Normierung: Summenspalten in % neu berechnen (falls beide Seiten existieren)
+        if any(col == "Fy_1 [%]" for col in df.columns) and any(col == "Fy_2 [%]" for col in df.columns):
+            df["Fy_sum [%]"] = df["Fy_1 [%]"] + df["Fy_2 [%]"]
+        if any(col == "Fz_1 [%]" for col in df.columns) and any(col == "Fz_2 [%]" for col in df.columns):
+            df["Fz_sum [%]"] = df["Fz_1 [%]"] + df["Fz_2 [%]"]
+        if any(col == "Fx_1 [%]" for col in df.columns) and any(col == "Fx_2 [%]" for col in df.columns):
+            df["Fx_sum [%]"] = df["Fx_1 [%]"] + df["Fx_2 [%]"]
        # export_path = "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/pipeline/original_vs_normalized_debug.xlsx"
        # with pd.ExcelWriter(export_path) as writer:
         #    original_df.to_excel(writer, sheet_name="Original", index=False)
@@ -678,6 +767,7 @@ def normalize_forces_by_weight(df, climberforce):
     
     
 
+# --- Neue Funktion: Summenspalte FgR_sum [%] ---
 # --- Neue Funktion: Summenspalte FgR_sum [%] ---
 def calc_fgr_sum(df):
     """
@@ -692,3 +782,44 @@ def calc_fgr_sum(df):
     return df
 
 
+# --- Neue Funktion: Summe der Resultierenden (Fres_xyz_sum) ---
+
+def calc_fres_xyz_sum_in_filedata(file_data: Dict) -> None:
+    """Erzeugt eine spaltenweise Summe der Resultierenden über beide Seiten und schreibt
+    sie als 'Fres_xyz_sum' in beide Seiten-DataFrames (G1R und G2L)."""
+    try:
+        g1 = file_data["G1R"]["data"]
+        g2 = file_data["G2L"]["data"]
+
+        # Percent unit
+        c1_pct = next((c for c in g1.columns if c == "Fres_xyz_1 [%]"), None)
+        c2_pct = next((c for c in g2.columns if c == "Fres_xyz_2 [%]"), None)
+        if c1_pct and c2_pct:
+            fres_sum_pct = g1[c1_pct].values + g2[c2_pct].values
+            g1.loc[:, "Fres_xyz_sum [%]"] = fres_sum_pct
+            g2.loc[:, "Fres_xyz_sum [%]"] = fres_sum_pct
+
+        # Newton unit
+        c1_n = next((c for c in g1.columns if c == "Fres_xyz_1 [N]"), None)
+        c2_n = next((c for c in g2.columns if c == "Fres_xyz_2 [N]"), None)
+        if c1_n and c2_n:
+            fres_sum_n = g1[c1_n].values + g2[c2_n].values
+            g1.loc[:, "Fres_xyz_sum [N]"] = fres_sum_n
+            g2.loc[:, "Fres_xyz_sum [N]"] = fres_sum_n
+
+    except Exception as e:
+        print(f"[calc_fres_xyz_sum_in_filedata] Fehler: {e}")
+
+
+def reset_invalid_intervals_from_gui():
+    """
+    Setzt config.invalid_intervals_list auf den Wert von
+    config.gui_invalid_intervals_override, falls dieser vorhanden ist.
+    Ansonsten wird die Liste geleert.
+    """
+    if getattr(config, "gui_invalid_intervals_override", None) is not None:
+        config.invalid_intervals_list = config.gui_invalid_intervals_override.copy()
+        print(f"Using GUI override for invalid_intervals_list: {config.invalid_intervals_list}")
+    else:
+        config.invalid_intervals_list.clear()
+        print("No GUI override set. Clearing invalid_intervals_list.")

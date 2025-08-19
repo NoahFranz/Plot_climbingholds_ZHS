@@ -66,6 +66,7 @@ def main():
         for side_forces in forces_to_plot.values()
         for force, selected in side_forces.items() if selected
     ))
+
     export_data = config.plot_settings.get("export_data", False)
     
     normalizebyweight = filter_settings["normalize_by_weight"]
@@ -76,6 +77,7 @@ def main():
     if filter_settings["normalize_by_weight"] == True:
         print("\nForces Normalized by weight")
         optional_suffix += "_NBW"
+        config.NBW = "_NBW"
     if config.plot_settings.get("show_impuls_data", False):
         optional_suffix += "_IMP"
     if filter_settings["use_filter"]:
@@ -111,35 +113,25 @@ def main():
     config.processing_settings = copy.deepcopy(settings)
 
     folder_list = [
-       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/testing",
-      #  "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Moment",
-    #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/068-static-dynamic",
-    #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/069-static",
-    #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/070-dynamic",
-     # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability"
-       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Test-Rest",
-       #     "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2",
-       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/pipeline",
- #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik",
- #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik/Leftside_data",
- #  "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik/Rightside_data",
-  #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow",
- #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black",
-# "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey",
- #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front",
- #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/cross",
- "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe"
-# "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front/createJson"
- # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Clipping",
- #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe",
- # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout",
- # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/ForceDevRatio"
+     "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe/onlywood",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black/front",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow/front"
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Trail",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Perf",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/HighEnd",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Basic",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/all_shoes"
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black/cross"
     
 ]
+    config.optional_suffix += "_" + "_".join(config.force_to_plot)
+    if config.plot_only_wooden_holds:
+        config.optional_suffix += "_oWH"
     
     for curr_folder in folder_list:
         if config.deebug_mode:
-            print("currentnt folder: ", curr_folder)
+            print("current folder: ", curr_folder)
         folder_path = curr_folder
         save_folder = curr_folder + "/plots"
         config.current_folder = folder_path
@@ -148,11 +140,12 @@ def main():
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
 
-        
+        #print("\nBefore: config. invalid_intervals_list = ", config.invalid_intervals_list)
+        print("\n ========== Processing data from folder: ", folder_path)
         all_lvm_data_dict = load_lvm_data(folder_path, settings=settings, export=export_data)
         if cutoff.get("active", False):
             optional_suffix += f"_trimmed-S{cutoff['start']}-E{cutoff['end']}"
-        
+        print("After:config. invalid_intervals_list = ", config.invalid_intervals_list)
         all_lvm_data_dict, forces_g1, forces_g2 = prepare_data(all_lvm_data_dict, forces_to_plot, cutoff)
         if all_lvm_data_dict is None:
             return
@@ -172,9 +165,7 @@ def main():
             print("\n ----------------------------------------------")
             print("\n ---------------- Plotting --------------------")  
             print("\n ----------------------------------------------")
-            config.optional_suffix += "_" + "_".join(config.force_to_plot)
-            if config.plot_only_wooden_holds:
-                config.optional_suffix += "_oWH"
+
                 
 
             if config.plot_settings.get("diagram_type") == "time":   
@@ -259,20 +250,27 @@ def main():
 
                 if config.plot_settings.get("plot_mean_metrics_bar", False):
                     print("Plot: plot_mean_metrics_bar aktiviert")
-                    for side in ["G1R", "G2L"]:
-                        # Bar plot
-                        plot_mean_metrics_bar(
-                            all_lvm_data_dict=all_lvm_data_dict,
-                            forces=unique_force_list,
-                            metric=selected_metric,
-                            side=side,
-                            figsize=(8, 6),
-                            title=f"Mean-{selected_metric}",
-                            save_plot=config.plot_settings["save"],
-                            save_folder=save_folder,
-                            #split_view=config.plot_settings.get("bar_split", False)
-
-                        )
+                    loop = True
+                    if loop:
+                        selected_metrics_list = ["max", "mean",]
+                        if "Fres_xyz" in unique_force_list:
+                            selected_metrics_list += [m for m in ("impuls", "contact time") if m not in selected_metrics_list]
+                        for selected_metric in selected_metrics_list:
+                            for side in ["G2L", "G1R"]:
+                                if not holds_to_plot.get(side, False):
+                                    continue
+                                # Bar plot
+                                plot_mean_metrics_bar(
+                                    all_lvm_data_dict=all_lvm_data_dict,
+                                    forces=unique_force_list,
+                                    metric=selected_metric,
+                                    side=side,
+                                    figsize=(8, 6),
+                                    title=f"Mean-{selected_metric}",
+                                    save_plot=config.plot_settings["save"],
+                                    save_folder=save_folder,
+                                    #split_view=config.plot_settings.get("bar_split", False)
+                                )
 
                 if config.plot_settings.get("plot_fgr_sum", False):
                     print("Plot: plot_FgR_sum aktiviert")
@@ -313,6 +311,8 @@ def main():
     # Show all generated plots after all plotting is done
     import matplotlib.pyplot as plt
     plt.show()
+    config.file_number = ""
+    config.processed_files_list = ""
 
 
 

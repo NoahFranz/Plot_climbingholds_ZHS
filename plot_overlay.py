@@ -3,13 +3,46 @@ import json
 import pandas as pd
 #mport pingouin as pg
 
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 from matplotlib import colormaps
+
 from config import COLOR_MAPPING
+from config import file_acronyms_map
+from plotUITLS import pretty_component
+
+
+def finalize_legend_last_std(ax):
+    """Ensure legend shows once and any entry containing 'STD' appears last.
+    Preserves insertion order for other labels and removes duplicates.
+    """
+    handles, labels = ax.get_legend_handles_labels()
+    # Keep only visible, labeled entries
+    pairs = [(h, l) for h, l in zip(handles, labels) if l and not l.startswith("_")]
+    # De-duplicate while preserving first occurrence
+    seen = set()
+    uniq = []
+    for h, l in pairs:
+        if l in seen:
+            continue
+        seen.add(l)
+        uniq.append((h, l))
+    # Partition so that any label containing 'STD' is moved to the end
+    std_pairs = [(h, l) for h, l in uniq if "STD" in l]
+    nonstd_pairs = [(h, l) for h, l in uniq if "STD" not in l]
+    if uniq:
+        ax.legend([h for h, _ in nonstd_pairs + std_pairs], [l for _, l in nonstd_pairs + std_pairs])
+    else:
+        ax.legend()
+
+# --- Utility: detect if axes actually contains plotted data (lines, collections, patches, images)
+def _axes_has_content(ax):
+    return bool(ax.lines or ax.collections or ax.patches or ax.images)
+
+
 
 """
 Module for plotting force-time curves from summary_metadata.json, including per-interval overlays and per-file mean±STD.
@@ -46,19 +79,53 @@ def extract_file_identity(file_key: str) -> str:
     return file_key.split("-")[0]
 
 def construct_force_key(force_component: str, side_key: str) -> str:
-    """Return the JSON key for force_component and side_key, mapping side to suffix and component to units."""
+    """Return the JSON key for force_component and side_key, handling units and when to omit side suffix."""
     side_suffix = "1" if side_key == "G1R" else "2"
+
+    # Components that are already aggregated (no per-sensor suffix in JSON)
+    no_suffix_components = {"FgR_sum", "Fres_yz", "Fres_xyz", "Fres",
+                            "Fy_sum", "Fz_sum", "Fx_sum"}
+
     unit_map = {
         "Fy": " [%]",
         "Fz": " [%]",
         "Fx": " [%]",
         "Mz": " [Nm]",
         "FgR_sum": " [%]",
+        "Fy_sum": " [%]",
+        "Fz_sum": " [%]",
+        "Fx_sum": " [%]",
         "Fres_yz": "",
-        "Fres_xyz": ""
+        "Fres_xyz": "",
+        "Fres": " [%]"
     }
     unit = unit_map.get(force_component, "")
+
+    if force_component in no_suffix_components:
+        # e.g., "FgR_sum [%]" or "Fres_yz"
+        return f"{force_component}{unit}"
+
+    # Default: per-sensor forces/moment use side suffix, e.g., "Fy_1 [%]"
     return f"{force_component}_{side_suffix}{unit}"
+
+# --- Utility: choose y-label based on filename and force/moment ---
+from typing import Optional
+def _ylabel_by_units(json_path: str, force_component: Optional[str], dual_mode: bool = False) -> str:
+    """
+    Decide y-axis label based on whether the JSON filename indicates normalization by body weight.
+    If the filename contains '_NBW', use percent body weight units; otherwise use SI units.
+    - Forces: F [\%BW]  or F [N]
+    - Moments: M [\%BW·m] or M [Nm]
+    In dual_mode (Fy/Fz together), always treat as forces.
+    """
+    bw_norm = "_NBW" in os.path.basename(json_path)
+    is_moment = (force_component is not None) and str(force_component).startswith("M")
+    if dual_mode:
+        return "F [%BW]" if bw_norm else "F [N]"
+    if is_moment:
+        return "M [%BW·m]" if bw_norm else "M [Nm]"
+    else:
+        return "F [%BW]" if bw_norm else "F [N]"
 
 def plot_mean_and_std(
     t_common: np.ndarray,
@@ -71,7 +138,7 @@ def plot_mean_and_std(
 ) -> None:
     """Plot the mean curve and optional ±1 STD shading for interpolated force data."""
     mean_curve = np.nanmean(all_f_interp, axis=0)
-    label_str = f"Mean-{force_component}-{side_label[-1]}"
+    label_str = f"Mean–{pretty_component(force_component)}"
     plt.plot(
         t_common,
         mean_curve,
@@ -105,6 +172,7 @@ def plot_interval_for_single_test(
     show_trial_mean: bool = False,
     show_trial_std: bool = False,
     show_global_mean=True,
+    second_force_component: Optional[str] = None,
 ) -> None:
     """
     Plot force-time curves for each side, with options to normalize time, show std, and save figures.
@@ -118,39 +186,51 @@ def plot_interval_for_single_test(
     """
     data = load_data(json_path, exclude_interval)
 
-    sides = {"G1R": [], "G2L": []}
+
+    dual_mode = second_force_component is not None
+    if dual_mode:
+        # Keep the implementation simple: only raw interval overlays in dual mode
+        show_trial_mean = False
+        show_trial_std = False
+        show_global_mean = False
+
     cmap = colormaps["tab10"]
 
-    # Collect intervals
-    for file_idx, (file_key, file_content) in enumerate(data.items()):
-        for side_key in ["G1R", "G2L"]:
-            if side_key not in file_content:
-                continue
-            intervals = file_content[side_key].get("intervals", {})
-            for int_idx, (int_key, interval_data) in enumerate(intervals.items()):
-                if int_key == "Mean-Metrics":
+    def _collect_intervals_for_component(component: str) -> Dict[str, list]:
+        sides_local = {"G1R": [], "G2L": []}
+        for file_idx, (file_key, file_content) in enumerate(data.items()):
+            for side_key in ["G1R", "G2L"]:
+                if side_key not in file_content:
                     continue
-                series = interval_data.get("interval_data", {})
-                t = np.array(series.get("Time [s]", []))
-                force_key = construct_force_key(force_component, side_key)
-                f = np.array(series.get(force_key, []))
-                t = np.asarray(t, dtype=float)
-                f = np.asarray(f, dtype=float)
-                if len(t) < 2 or len(f) < 2:
-                    continue
-                sort_idx = np.argsort(t)
-                t, f = t[sort_idx], f[sort_idx]
-                t = t - t[0]
-                if normalize_time:
-                    t = t / t[-1] if t[-1] != 0 else t
+                intervals = file_content[side_key].get("intervals", {})
+                for int_idx, (int_key, interval_data) in enumerate(intervals.items()):
+                    if int_key == "Mean-Metrics":
+                        continue
+                    series = interval_data.get("interval_data", {})
+                    t = np.array(series.get("Time [s]", []))
+                    force_key = construct_force_key(component, side_key)
+                    f = np.array(series.get(force_key, []))
+                    t = np.asarray(t, dtype=float)
+                    f = np.asarray(f, dtype=float)
+                    if len(t) < 2 or len(f) < 2:
+                        continue
+                    sort_idx = np.argsort(t)
+                    t, f = t[sort_idx], f[sort_idx]
+                    t = t - t[0]
+                    if normalize_time:
+                        t = t / t[-1] if t[-1] != 0 else t
+                    sides_local[side_key].append({
+                        "t": t,
+                        "f": f,
+                        "file": file_key,
+                        "color": cmap(file_idx % 10),
+                        "alpha": 0.3 + 0.7 * (1 - int_idx / max(1, len(intervals)-1)),
+                        "interval_index": int_idx,
+                    })
+        return sides_local
 
-                sides[side_key].append({
-                    "t": t,
-                    "f": f,
-                    "file": file_key,
-                    "color": cmap(file_idx % 10),
-                    "alpha": 0.3 + 0.7 * (1 - int_idx / max(1, len(intervals)-1))
-                })
+    sides = _collect_intervals_for_component(force_component)
+    sides_second = _collect_intervals_for_component(second_force_component) if dual_mode else {"G1R": [], "G2L": []}
 
     # --- Add mean/std per trial if requested ---
     if show_trial_mean:
@@ -163,8 +243,12 @@ def plot_interval_for_single_test(
             for file_key, curves in file_grouped.items():
                 if len(curves) < 1:
                     continue
-                t_min = max(curve[0][0] for curve in curves)
-                t_max = min(curve[0][-1] for curve in curves)
+                print(f"[DEBUG] Processing file: {file_key} with {len(curves)} curves")
+                print(f"[DEBUG] {file_key}:")
+                for i, (t_vals, _) in enumerate(curves):
+                    print(f"  Curve {i}: t[0]={t_vals[0]:.3f}, t[-1]={t_vals[-1]:.3f}, len={len(t_vals)}")
+                t_min = min(curve[0][0] for curve in curves)
+                t_max = max(curve[0][-1] for curve in curves)
                 if t_max <= t_min:
                     continue
                 t_common = np.linspace(t_min, t_max, 200)
@@ -185,28 +269,50 @@ def plot_interval_for_single_test(
                     trial_curve["std"] = std
             sides[side_key] = new_sides[side_key]
 
-    def plot_side(intervals: List[Dict[str, Any]], side_label: str) -> None:
+    def plot_side(intervals: List[Dict[str, Any]],
+                  intervals_second: List[Dict[str, Any]],
+                  side_label: str) -> None:
         plt.figure(figsize=(10, 5))
         all_f_interp = []
         files_seen = {}
+
+        # Style cycle for up to 4 intervals: 1st solid, 2nd dashed, 3rd dotted, 4th dash-dot
+        style_cycle = ['-', '--', ':', '-.']
+        # Enforce component-specific colors in dual mode
+        color_primary = COLOR_MAPPING.get(force_component)
+        color_secondary = COLOR_MAPPING.get(second_force_component) if dual_mode else None
+        # Sort intervals by original interval index for consistent styling across components
+        def _sorted_by_interval_index(items):
+            return sorted(items, key=lambda d: d.get('interval_index', 0))
+        intervals = _sorted_by_interval_index(intervals)
+        intervals_second = _sorted_by_interval_index(intervals_second)
 
         t_min = min((curve["t"][0] for curve in intervals if len(curve["t"]) > 0), default=0)
         t_max = max((curve["t"][-1] for curve in intervals if len(curve["t"]) > 0), default=1)
         t_common = np.linspace(t_min, t_max, 200)
 
+        # Add flag to track if the STD legend label has been shown
+        showed_std_legend = False
+
         for interval in intervals:
             t = interval["t"]
             f = interval["f"]
-            color = interval["color"]
+            # Override color in dual mode to make Fy/Fz visually distinct
+            color = color_primary if (dual_mode and color_primary) else interval["color"]
             alpha = interval["alpha"]
             file = interval["file"]
             side_number = side_label[-1]  # Extract "R" or "L"
             file_identity = extract_file_identity(file)
-            label = f"{file_identity}-{force_component}-{side_number}" if file not in files_seen else f"_{file_identity}-{force_component}-{side_number}"
+            from config import file_acronyms_map
+            base_label = file_acronyms_map.get(file_identity, file_identity)
+            comp_label = pretty_component(force_component)
+            base_with_comp = f"{base_label}–{comp_label}"
+            label = base_with_comp if file not in files_seen else f"_{base_with_comp}"
             files_seen[file] = True
 
-            if not show_std:
-                plt.plot(t, f, color=color, alpha=alpha, label=label)
+            idx = interval.get('interval_index', 0)
+            linestyle = style_cycle[min(idx, len(style_cycle)-1)] if dual_mode else '-'
+            plt.plot(t, f, color=color, alpha=alpha, linestyle=linestyle, label=label)
             try:
                 interp_f = interp1d(t, f, kind='linear', bounds_error=False, fill_value=np.nan)(t_common)
                 all_f_interp.append(interp_f)
@@ -214,11 +320,14 @@ def plot_interval_for_single_test(
                 continue
             # Move the show_points block here so "x" markers are drawn for each interval
             if show_points:
-                plt.plot(t, f, "x", color=color, alpha=alpha * 0.9)
+                plt.plot(t, f, ".", color=color, alpha=alpha * 0.9)
             # Show STD band if present in interval (for trial mean+std)
             if show_std and "std" in interval:
                 std = interval["std"]
-                plt.fill_between(t, f - std, f + std, color=color, alpha=0.3, label="±1 STD" if file not in files_seen else None)
+                std_label = "±1 STD" if not showed_std_legend else None
+                plt.fill_between(t, f - std, f + std, color=color, alpha=0.3, label=std_label)
+                showed_std_legend = True
+
 
         if show_global_mean and all_f_interp:
             plot_mean_and_std(
@@ -230,23 +339,55 @@ def plot_interval_for_single_test(
                 mean_linewidth=mean_linewidth,
                 mean_linestyle=mean_linestyle
             )
+        if dual_mode and intervals_second:
+            # Plot the second force component with component color and consistent style
+            for interval in intervals_second:
+                t = interval["t"]
+                f = interval["f"]
+                color = color_secondary if color_secondary else interval["color"]
+                alpha = interval["alpha"]
+                file = interval["file"]
+                file_identity = extract_file_identity(file)
+                from config import file_acronyms_map
+                base_label = file_acronyms_map.get(file_identity, file_identity)
+                label = f"{base_label}–{pretty_component(second_force_component)}"
+                idx = interval.get('interval_index', 0)
+                linestyle = style_cycle[min(idx, len(style_cycle)-1)]
+                plt.plot(t, f, linestyle=linestyle, color=color, alpha=alpha, label=label)
 
         plt.xlabel("Time [s]" if not normalize_time else "Normalized Time")
-        plt.ylabel("F [%]")
+        # Choose y-label based on filename units and component
+        ylabel = _ylabel_by_units(json_path, force_component, dual_mode=dual_mode)
+        plt.ylabel(ylabel)
         y_min = min((min(curve["f"]) for curve in intervals if len(curve["f"]) > 0), default=0)
         y_max = max((max(curve["f"]) for curve in intervals if len(curve["f"]) > 0), default=80)
         #plt.ylim(y_min - 30, 80)
-        plt.title(f"{force_component} – {side_label}")
+        title_str = f"{pretty_component(force_component)} – {side_label}"
+        plt.title(title_str)
         plt.grid(True)
-        plt.legend()
+        ax = plt.gca()
+        # If nothing meaningful was drawn, do not save or show
+        if not _axes_has_content(ax):
+            print("No meaningful data to plot for", title_str)
+            plt.close(plt.gcf())
+            return
+
+        finalize_legend_last_std(ax)
         plt.tight_layout()
         base_dir = os.path.dirname(json_path)
-        # Create subfolder for this force-component and side
-        subfolder = os.path.join(base_dir, f"{force_component}_{side_label[-1]}")
+        # Create subfolder for plots under .../plots/G1R or .../plots/G2L
+        subfolder = os.path.join(base_dir, "plots", side_label)
         os.makedirs(subfolder, exist_ok=True)
         # Use file_identity from the first interval if available, else empty string
         file_identity = extract_file_identity(intervals[0]["file"]) if intervals and "file" in intervals[0] else ""
+        # Adjust x-limit based on specific file identities
+        x_limit_ids = {"055", "056", "057", "058", "059", "060", "061", "062", "063"}
+        if file_identity in x_limit_ids:
+            plt.xlim(-0.02, 0.55)
         filename = f"{file_identity}_interval_overlay_{force_component}-{side_label[-1]}"
+        # If both components are present, reflect this in the filename
+        if dual_mode and second_force_component:
+            filename += f"_{force_component}+{second_force_component}"
         if normalize_time:
             filename += "_t_norm"
         if show_std:
@@ -259,15 +400,22 @@ def plot_interval_for_single_test(
             filename += "_std"
         if filename_suffix:
             filename += f"_{filename_suffix}"
+        # Append _NBW to exported filename if the source JSON indicates normalization
+        if "_NBW" in os.path.basename(json_path):
+            filename += "_NBW"
         filename += ".png"
         filepath = os.path.join(subfolder, filename)
         if save_flag:
             print(f"Saving plot to {filepath}")
+            title_obj = plt.gca().title
+            title_text = title_obj.get_text()
+            title_obj.set_text("")  # Remove title before saving
             plt.savefig(filepath, dpi=700)
+            title_obj.set_text(title_text)  # Restore title for display
         plt.show()
-
-    plot_side(sides["G1R"], "G1R")
-    plot_side(sides["G2L"], "G2L")
+    
+    plot_side(sides["G1R"], sides_second["G1R"], "G1R")
+    plot_side(sides["G2L"], sides_second["G2L"], "G2L")
 
 
 
@@ -359,7 +507,9 @@ def plot_compare_and_combine_test_Retest(
                 mean = np.nanmean(interpolated, axis=0)
                 std = np.nanstd(interpolated, axis=0)
                 file_identity = extract_file_identity(file_key)
-                label_name = f"{file_identity}-{force_component}-{side_key[-1]}"
+                from config import file_acronyms_map
+                label_name = file_acronyms_map.get(file_identity, file_identity)
+                label_name = f"{label_name}–{pretty_component(force_component)}"
                 plt.plot(t_common, mean, label=label_name, color=cmap(file_idx % 10))
                 plt.fill_between(t_common, mean - std, mean + std, color=cmap(file_idx % 10), alpha=0.2)
 
@@ -379,7 +529,9 @@ def plot_compare_and_combine_test_Retest(
                 "Mean": combined_mean,
                 "STD": combined_std
             })
-            excel_path = os.path.join(subfolder, f"combined_mean_STD_{force_component}_{side_key}.xlsx")
+            # Append _NBW to export name if the source JSON indicates normalization
+            nbw_tag = "_NBW" if "_NBW" in os.path.basename(json_path) else ""
+            excel_path = os.path.join(subfolder, f"combined_mean_STD_{force_component}_{side_key}{nbw_tag}.xlsx")
             df_export.to_excel(excel_path, index=False)
             print(f"Saved combined mean/STD to: {excel_path}")
 
@@ -389,7 +541,7 @@ def plot_compare_and_combine_test_Retest(
                 color="black",
                 linewidth=mean_linewidth,
                 linestyle=mean_linestyle,
-                label=f"Combined-{force_component}-{side_key[-1]}"
+                label=f"Combined–{pretty_component(force_component)}"
             )
             plt.fill_between(
                 t_common,
@@ -408,9 +560,16 @@ def plot_compare_and_combine_test_Retest(
             plt.ylim(-10, 80)
 
         plt.xlabel("Normalized Time" if normalize_time else "Time [s]")
-        plt.ylabel("F [%]")
+        ylabel = _ylabel_by_units(json_path, force_component, dual_mode=False)
+        plt.ylabel(ylabel)
         plt.grid(True)
-        plt.legend()
+        ax = plt.gca()
+        # Skip saving/showing if figure has no plotted content
+        if not _axes_has_content(ax):
+            plt.close(plt.gcf())
+            continue
+
+        finalize_legend_last_std(ax)
         plt.tight_layout()
         base_dir = os.path.dirname(json_path)
         # Create subfolder for this force-component and side
@@ -422,12 +581,15 @@ def plot_compare_and_combine_test_Retest(
             filename = f"mean_std_combined_{force_component}-{side_key[-1]}_{file_ids}"
         if normalize_time:
             filename += "_t_norm"
+        # Append _NBW to exported filename if the source JSON indicates normalization
+        if "_NBW" in os.path.basename(json_path):
+            filename += "_NBW"
         filename += ".png"
         filepath = os.path.join(subfolder, filename)
         if save_flag:
             print(f"Saving plot to {filepath}")
             plt.savefig(filepath, dpi=700)
-        plt.title(f"{force_component} – Mean ± STD per File and Combined – {side_key}")
+        plt.title(f"{pretty_component(force_component)} – Mean ± STD per File and Combined – {side_key}")
         plt.show()
 def calculate_reliability_metric(json_path: str, re_metric: str, force_component: str,) -> None:
     """
@@ -611,58 +773,43 @@ def export_STD_CoV_for_trials(json_path: str, force_component: str) -> None:
                 std = np.nanstd(interpolated, axis=0)
                 cov = np.divide(std, mean, out=np.full_like(std, np.nan), where=mean!=0) * 100
 
+                # Build DataFrame with an extra 'Description' column
                 df = pd.DataFrame({
+                    "Description": [""] * len(mean),
                     "Mean": mean,
                     "STD": std,
                     "CoV [%]": cov
                 })
 
+                # Compute summary stats for STD and CoV only
                 summary = df[["STD", "CoV [%]"]].agg(["min", "max", "mean"])
-                df.loc["min"] = [""] + list(summary.loc["min"])
-                df.loc["max"] = [""] + list(summary.loc["max"])
-                df.loc["mean"] = [""] + list(summary.loc["mean"])
+
+                # Append labeled summary rows
+                summary_rows = pd.DataFrame([
+                    {
+                        "Description": "min",
+                        "Mean": "",
+                        "STD": summary.loc["min", "STD"],
+                        "CoV [%]": summary.loc["min", "CoV [%]"],
+                    },
+                    {
+                        "Description": "max",
+                        "Mean": "",
+                        "STD": summary.loc["max", "STD"],
+                        "CoV [%]": summary.loc["max", "CoV [%]"],
+                    },
+                    {
+                        "Description": "mean",
+                        "Mean": "",
+                        "STD": summary.loc["mean", "STD"],
+                        "CoV [%]": summary.loc["mean", "CoV [%]"],
+                    },
+                ])
+                df = pd.concat([df, summary_rows], ignore_index=True)
 
                 df.to_excel(writer, sheet_name=side, index=False)
         print(f"Saved trial STD/CoV data to: {excel_path}")
 
-
-# --- Utility function: ICC(3,1) manual calculation ---
-def calculate_icc_3_1(data_matrix: np.ndarray) -> float:
-    """
-    Calculate ICC(3,1) manually from a 2D numpy array.
-    Each row = subject, each column = repeated measures (e.g., Test and Retest).
-
-    Parameters:
-        data_matrix (np.ndarray): shape (n_subjects, n_sessions)
-
-    Returns:
-        float: ICC(3,1) value
-    """
-    n, k = data_matrix.shape  # n = subjects, k = sessions
-
-    # Mean calculations
-    grand_mean = np.mean(data_matrix)
-    subject_means = np.mean(data_matrix, axis=1)
-    session_means = np.mean(data_matrix, axis=0)
-
-    # Sum of Squares
-    ss_total = np.sum((data_matrix - grand_mean) ** 2)
-    ss_subjects = k * np.sum((subject_means - grand_mean) ** 2)
-    ss_sessions = n * np.sum((session_means - grand_mean) ** 2)
-    ss_error = ss_total - ss_subjects - ss_sessions
-
-    # Degrees of freedom
-    df_subjects = n - 1
-    df_error = (n - 1) * (k - 1)
-
-    # Mean Squares
-    ms_subjects = ss_subjects / df_subjects
-    ms_error = ss_error / df_error
-
-    # ICC(3,1) formula
-    icc = (ms_subjects - ms_error) / (ms_subjects + (k - 1) * ms_error)
-    
-    return icc
 
 if __name__ == "__main__":
     import tkinter as tk
@@ -683,12 +830,15 @@ if __name__ == "__main__":
     scrollable_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
     # Variables bound to each control
-    show_trial_mean_per_file = tk.BooleanVar(value=False)
-    show_trial_std_per_file = tk.BooleanVar(value=False)
+    show_trial_mean_per_file = tk.BooleanVar(value=True)
     tk.Checkbutton(scrollable_frame, text="     Option: Show Mean per Trial", variable=show_trial_mean_per_file).pack(anchor="w", padx=10, pady=2)
-    tk.Checkbutton(scrollable_frame, text="     Option: Show STD per Trial", variable=show_trial_std_per_file).pack(anchor="w", padx=10, pady=2)
-    show_global_mean = tk.BooleanVar(value=True)
-    tk.Checkbutton(scrollable_frame, text="     Option: Show Global Mean", variable=show_global_mean).pack(anchor="w", padx=10, pady=2) 
+    # Unified STD checkbox
+    show_std_flag = tk.BooleanVar(value=False)
+    tk.Checkbutton(scrollable_frame, text="     Option: Show and Compute STD (per trial)", variable=show_std_flag).pack(anchor="w", padx=10, pady=2)
+    show_global_mean = tk.BooleanVar(value=False)
+    tk.Checkbutton(scrollable_frame, text="     Option: Show Global Mean", variable=show_global_mean).pack(anchor="w", padx=10, pady=2)
+    GUI_plot_fy_fz_together = tk.BooleanVar(value=False)
+    tk.Checkbutton(scrollable_frame, text="     Option: Plot Fy and Fz together (same figure)", variable=GUI_plot_fy_fz_together).pack(anchor="w", padx=10, pady=2)
     # --- Mean Line Width and Style Controls ---
     GUI_mean_linewidth = tk.DoubleVar(value=1.5)
     GUI_mean_linestyle = tk.StringVar(value="-")
@@ -700,10 +850,9 @@ if __name__ == "__main__":
     tk.Label(scrollable_frame, text="Mean Line Style:").pack(anchor="w", padx=10, pady=(10, 0))
     ttk.OptionMenu(scrollable_frame, GUI_mean_linestyle, "-", "-", "--", "-.", ":").pack(anchor="w", padx=20)
     canceled = tk.BooleanVar(value=False)
-    exec_plot1 = tk.BooleanVar(value=False)
-    exec_plot2 = tk.BooleanVar(value=False)
+    plot_interval_for_single_var = tk.BooleanVar(value=True)
+    exec_test_retest_var = tk.BooleanVar(value=False)
     GUI_norm = tk.BooleanVar(value=False)
-    GUI_showstd = tk.BooleanVar(value=False)
     GUI_force_comp = tk.StringVar(value="Fy")
     GUI_save = tk.BooleanVar(value=False)
     GUI_only_combined = tk.BooleanVar(value=False)
@@ -722,11 +871,10 @@ if __name__ == "__main__":
     tk.Entry(scrollable_frame, textvariable=GUI_exclude_interval).pack(anchor="w", padx=20)
 
     # Checkboxes
-    tk.Checkbutton(scrollable_frame, text="Function per trial:    Plot Force Intervals / or mean of single trial",     variable=exec_plot1).pack(anchor="w", padx=10, pady=2)
-    tk.Checkbutton(scrollable_frame, text="Plot Test-Retest comparrison Mean & STD",variable=exec_plot2).pack(anchor="w", padx=10, pady=2)
+    tk.Checkbutton(scrollable_frame, text="Function per trial:    Plot Force Intervals / or mean of single trial",     variable=plot_interval_for_single_var).pack(anchor="w", padx=10, pady=2)
+    tk.Checkbutton(scrollable_frame, text="Plot Test-Retest comparrison Mean & STD",variable=exec_test_retest_var).pack(anchor="w", padx=10, pady=2)
     tk.Checkbutton(scrollable_frame, text="     Option: Show Only Combined Mean ± STD", variable=GUI_only_combined).pack(anchor="w", padx=10, pady=2)
     tk.Checkbutton(scrollable_frame, text="     Option: Normalize Time",           variable=GUI_norm).pack(anchor="w", padx=10, pady=2)
-    tk.Checkbutton(scrollable_frame, text="     Option Show STD Band",            variable=GUI_showstd).pack(anchor="w", padx=10, pady=2)
     tk.Checkbutton(scrollable_frame, text="Save Figures as PNG",      variable=GUI_save).pack(anchor="w", padx=10, pady=2)
     tk.Label(scrollable_frame, text="Filename Suffix:").pack(anchor="w", padx=10, pady=(10, 0))
     tk.Entry(scrollable_frame, textvariable=GUI_filename_suffix).pack(anchor="w", padx=20)
@@ -737,7 +885,10 @@ if __name__ == "__main__":
 
     # Dropdown for force-component
     tk.Label(scrollable_frame, text="Force Component:").pack(anchor="w", padx=10, pady=(10,0))
-    ttk.OptionMenu(scrollable_frame, GUI_force_comp, GUI_force_comp.get(), "Fy", "Fz", "Fx").pack(anchor="w", padx=20)
+    ttk.OptionMenu(
+        scrollable_frame, GUI_force_comp, GUI_force_comp.get(),
+        "Fy", "Fz", "Fx", "Fres", "FgR_sum", "Fy_sum", "Fz_sum", "Fx_sum"
+    ).pack(anchor="w", padx=20)
 
     # Frame for Looping combinations
     loop_frame = tk.LabelFrame(scrollable_frame, text="Looping", padx=10, pady=5)
@@ -751,6 +902,11 @@ if __name__ == "__main__":
         "Fz": tk.BooleanVar(value=False),
         "Fx": tk.BooleanVar(value=False),
         "Mz": tk.BooleanVar(value=False),
+        "Fres": tk.BooleanVar(value=False),
+        "FgR_sum": tk.BooleanVar(value=False),
+        "Fy_sum": tk.BooleanVar(value=False),
+        "Fz_sum": tk.BooleanVar(value=False),
+        "Fx_sum": tk.BooleanVar(value=False),
     }
 
     loop_metrics = {
@@ -801,20 +957,15 @@ if __name__ == "__main__":
 
     # Center window on the screen
     root.update_idletasks()
-    win_width = root.winfo_width()
-    win_height = root.winfo_height()
-    screen_width = root.winfo_screenwidth()
-    screen_height = root.winfo_screenheight()
-    x = (screen_width - win_width) // 2
-    y = (screen_height - win_height) // 2
-    root.geometry(f"{win_width}x{win_height}+{x}+{y}")
+    root.geometry("800x1200")
     root.mainloop()
     GUI_show_points = GUI_show_raw_points.get()
     mean_linewidth_val = GUI_mean_linewidth.get()
     mean_linestyle_val = GUI_mean_linestyle.get()
     filename_suffix_val = GUI_filename_suffix.get()
     GUI_show_trial_mean = show_trial_mean_per_file.get()
-    GUI_show_trial_std = show_trial_std_per_file.get()
+    GUI_show_trial_std = show_std_flag.get()
+    GUI_dual_fy_fz = GUI_plot_fy_fz_together.get()
 
     # --- Read settings back into variables ---
     selected_loop_forces = [name for name, var in loop_forces.items() if var.get()]
@@ -826,10 +977,10 @@ if __name__ == "__main__":
         sys.exit()
     calc_reliability_metrics                  = calc_rel_metric.get()
     selected_re_metric                     = re_metric_selection.get()
-    exec_plot_interval_for_single_test_function = exec_plot1.get()
-    exec_plot_compare_and_combine_test_Retest_function    = exec_plot2.get()
+    exec_plot_interval_for_single_test_function = plot_interval_for_single_var.get()
+    exec_plot_compare_and_combine_test_Retest_function    = exec_test_retest_var.get()
     GUI_time_normalization              = GUI_norm.get()
-    GUI_show_std                        = GUI_showstd.get()
+    GUI_show_std                        = show_std_flag.get()
     GUI_force_component                 = GUI_force_comp.get()
     GUI_save_flag                       = GUI_save.get()
     do_append_stats                    = append_stats.get()
@@ -840,15 +991,58 @@ if __name__ == "__main__":
 
     # Path to your JSONs (adjust as needed)
     import glob
-    json_dir ="/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe"
-    #json_dir = "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/071_endurace"
-    json_paths = glob.glob(os.path.join(json_dir, "*summary.json"))
+    json_dirs = [
+        #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/cross",
+        #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow/cross",
+        #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black/cross",
+#        "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black/front",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow/front",
+"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Trail",
+"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Perf",
+"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/HighEnd",
+"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Basic",
+        #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/cross"
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/cross+front-combined",
+        #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front"
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik/Rightside_data",
+        #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik/Rightside_data/hide"
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/ForceDevRatio"
+        #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Clipping"
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Clipping/low",
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Clipping/high",
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout",
+         #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/GL_2vs1FH",
+ # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/GR_2vs1FH",
+ # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/Switch",
+ # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/Switch/single",
+  #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/Switch/single_I2"
+ # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/pure 2vs1FH"
+ #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/GL_2vs1FH/Frontal_vs_hipIn"
+ #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/GL_2vs1FH/only_front"
+ #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/GL_2vs1FH"
+ #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout/Switch/GL"
+ #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/ForceDevRatio"
+# "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Moment"
+# "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout"
+
+        #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe"
+        #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/071_endurace"
+    ]
+    json_paths = []
+    for dir_path in json_dirs:
+        json_paths.extend(glob.glob(os.path.join(dir_path, "*summary.json")))
+    json_paths = list(set(json_paths))  # Optional: remove duplicates
     selected_loop_forces = [name for name, var in loop_forces.items() if var.get()]
     for force_component in selected_loop_forces:
         GUI_force_component = force_component
         # Conditionally call plotting functions
         if exec_plot_interval_for_single_test_function:
             for json_path in json_paths:
+                second_fc = None
+                if GUI_dual_fy_fz and GUI_force_component in ("Fy", "Fz"):
+                    # Always pair Fy with Fz regardless of selection
+                    second_fc = "Fz" if GUI_force_component == "Fy" else "Fy"
                 plot_interval_for_single_test(
                     json_path=json_path,
                     force_component=GUI_force_component,
@@ -863,6 +1057,7 @@ if __name__ == "__main__":
                     show_trial_mean=GUI_show_trial_mean,
                     show_trial_std=GUI_show_trial_std,
                     show_global_mean=GUI_show_global_mean,
+                    second_force_component=second_fc,
                 )
 
         if exec_plot_compare_and_combine_test_Retest_function:
@@ -900,7 +1095,7 @@ if __name__ == "__main__":
         if do_append_stats:
             # Update with actual output file if dynamic
             # Keep the loop over output_dir as is
-            output_dir = json_dir
+            output_dir = json_dirs
             for root, dirs, files in os.walk(output_dir):
                 for file in files:
                     if file.startswith("Reliability_") and file.endswith(".xlsx"):
