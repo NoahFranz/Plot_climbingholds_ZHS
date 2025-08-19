@@ -1,0 +1,36 @@
+# Query: global_limits
+# ContextLines: 1
+
+15 results - 2 files
+
+plotdata.py:
+  246              data_left = plot_dict["G2L"]["data"][[col for col in plot_dict["G2L"]["data"].columns if any(f in col for f in forces_g2)]]
+  247:             y_min_left = plot_dict["G1R"]["global_y_limits"]["global_y_min"]*1.2
+  248:             y_max_left = plot_dict["G1R"]["global_y_limits"]["global_y_max"]*1.2
+  249              ax_left.set_ylim([y_min_left, y_max_left])
+
+utils.py:
+   49      Berechnet die globalen y-Achsen-Grenzen für beide Griffe (G2L und G1R)
+   50:     und fügt diese als 'global_y_limits' zum plot_dict hinzu.
+   51      Es wird das extremste y_max und das kleinste y_min beider Griffe verwendet.
+   52      """
+   53:     global_y_limits = {}
+   54  
+
+   70  
+   71:     # Speichern der globalen Limits in global_y_limits
+   72:     global_y_limits["global_y_min"] = global_y_min
+   73:     global_y_limits["global_y_max"] = global_y_max
+   74  
+   75      # Füge die globalen Limits zum plot_dict hinzu
+   76:     plot_dict["G1R"]["global_y_limits"] = global_y_limits
+   77:     plot_dict["G2L"]["global_y_limits"] = global_y_limits
+   78  
+
+  155                  print(f"      {k}: min= {min_v}, max= {max_v}")
+  156:             if "global_y_limits" in content:
+  157:                 gl = content["global_y_limits"]
+  158:                 print(f"    global_y_limits: min= {gl['global_y_min']:.2f}, max= {gl['global_y_max']:.2f}")
+  159              else:
+  160:                 print("    global_y_limits: Nicht gesetzt")
+  161  

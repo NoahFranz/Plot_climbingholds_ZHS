@@ -16,3 +16,6 @@ __pycache__/
 dist/
 *.spec
 *.dmg
+
+# Runsettings
+RunSettings_*
