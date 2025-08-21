@@ -1903,8 +1903,8 @@ def launch_gui():
                 downsample=max(1, int(down_var.get())),
                 title=title_var.get(),
                 start_at_video_time=(start_time if auto_sync_var.get() else None),
-                export_video=export_video_var.get(),
-                export_path=export_path_var.get() if export_video_var.get() else None,
+                export_video=export_video_var.get() or silent_export_var.get(),
+                export_path=export_path_var.get() if (export_video_var.get() or silent_export_var.get()) else None,
                 silent_export=silent_export_var.get(),
             )
         except Exception as e:
@@ -2063,7 +2063,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument('--title', type=str, default='ICHs – Live synchronised plot', help='Matplotlib window title')
     p.add_argument('--guid', type=str, default=None, help='Unique identifier for this run (GUID). If not provided, one will be generated automatically.')
     p.add_argument('--gui', action='store_true', help='Launch a GUI to select inputs instead of using CLI args')
-    p.add_argument('--bw', type=float, default=None, help='Body weight in kg (if omitted, try to parse from filename like _73kg). Used to normalize forces to %BW.')
+    p.add_argument('--bw', type=float, default=None, help='Body weight in kg (if omitted, try to parse from filename like _73kg). Used to normalize forces to percent body weight.')
     p.add_argument('--sg-window', type=int, default=21, help='Savitzky–Golay window length (odd).')
     p.add_argument('--sg-poly', type=int, default=3, help='Savitzky–Golay polynomial order (< window).')
     p.add_argument('--interp', type=str, choices=['linear', 'nearest'], default='linear',
