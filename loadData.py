@@ -823,3 +823,116 @@ def reset_invalid_intervals_from_gui():
     else:
         config.invalid_intervals_list.clear()
         print("No GUI override set. Clearing invalid_intervals_list.")
+
+
+# --- Lightweight LVM loader for live plotting ---
+def load_lvm(path: str) -> pd.DataFrame:
+    """
+    Load a .lvm file into a DataFrame suitable for live plotting, while:
+      1) Removing columns containing 'Comment', 'X_values'/'X_Value', or 'adc'
+      2) Computing side-wise resultants: Fres_xyz_1, Fres_xyz_2
+      3) Adding sums for Fx, Fy, Fz, Fres_xyz across sides
+      4) Normalising all force columns (Fx, Fy, Fz, Fres_xyz and their sums) to % body weight
+
+    Body weight is parsed from the filename via parse_metadata_from_filename
+    and converted to climberforce = kg * 9.81.
+
+    Returns the normalised DataFrame (time column is kept as in the source, typically 'Time [s]').
+    """
+    # 1) Read
+    df = pd.read_csv(path, sep="\t", decimal=",", header=21, engine="python", on_bad_lines="skip")
+    df.columns = df.columns.astype(str)
+    df = df.apply(pd.to_numeric, errors='coerce')
+
+    # 2) Clean columns using existing helper, then enforce extra drops
+    try:
+        df = clean_data(df)
+    except Exception:
+        # Fallback: keep df as-is if helper not available
+        pass
+    drop_tokens = ["comment", "x_values", "x_value", "adc"]
+    keep_cols = []
+    for c in df.columns:
+        lc = str(c).lower()
+        if any(tok in lc for tok in drop_tokens):
+            continue
+        keep_cols.append(c)
+    df = df[keep_cols]
+
+    # Helper to pick side-specific component column name (respects unit suffixes in names)
+    def _pick(col_prefix: str, side_suffix: str):
+        candidates = [c for c in df.columns if c.startswith(f"{col_prefix}_{side_suffix} ")]
+        return candidates[0] if candidates else None
+
+    # Determine unit per side from existing Fx/Fy/Fz columns
+    def _unit_for_side(side_suffix: str):
+        for base in ("Fy", "Fz", "Fx"):
+            c = _pick(base, side_suffix)
+            if c is not None:
+                return " [%]" if "[%]" in c else (" [N]" if "[N]" in c else None)
+        return None
+
+    # 3) Compute Fres_xyz_1 / Fres_xyz_2 if possible
+    for s in ("1", "2"):
+        fx_c = _pick("Fx", s)
+        fy_c = _pick("Fy", s)
+        fz_c = _pick("Fz", s)
+        unit = _unit_for_side(s) or " [N]"
+        if fx_c is not None and fy_c is not None and fz_c is not None:
+            fres = np.sqrt(df[fx_c]**2 + df[fy_c]**2 + df[fz_c]**2)
+            df.loc[:, f"Fres_xyz_{s}{unit}"] = fres
+
+    # 4) Add sums for Fx, Fy, Fz, Fres_xyz using existing helper
+    df = calc_force_sums(df)
+    # Also compute FgR_sum if both sides present
+    try:
+        df = calc_fgr_sum(df)
+    except Exception:
+        pass
+
+    # 5) Normalise to % body weight using filename metadata
+    file_stem = os.path.splitext(os.path.basename(path))[0]
+    md = parse_metadata_from_filename(file_stem)
+    kg = md.get("weight", None)
+    climberforce = float(kg * 9.81) if isinstance(kg, (int, float)) else None
+
+    if climberforce and climberforce > 0:
+        # Normalise base forces first using existing helper (Fx, Fy, Fz, Mz)
+        try:
+            # Make a copy and protect pre-normalised FgR_* columns by restoring them after
+            fg_cols = [c for c in df.columns if c.startswith('FgR_')]
+            backup = df[fg_cols].copy() if fg_cols else None
+            normalize_forces_by_weight(df, climberforce)
+            if backup is not None:
+                for c in backup.columns:
+                    if c in df.columns:
+                        df[c] = backup[c]
+        except Exception:
+            # Manual normalisation for Fx/Fy/Fz if helper is unavailable
+            for base in ("Fx", "Fy", "Fz"):
+                for col in list(df.columns):
+                    if col.startswith(f"{base}_") and "[N]" in col:
+                        df[col] = (df[col] / climberforce) * 100.0
+                        df.rename(columns={col: col.replace("[N]", "[%]")}, inplace=True)
+
+        # Normalise Fres_xyz (side-specific and sums) if present in Newton
+        for col in list(df.columns):
+            if col.startswith("Fres_xyz") and "[N]" in col:
+                df[col] = (df[col] / climberforce) * 100.0
+                df.rename(columns={col: col.replace("[N]", "[%]")}, inplace=True)
+
+        # Ensure sums exist in % (recompute after normalisation)
+        df = calc_force_sums(df)
+        try:
+            df = calc_fgr_sum(df)
+        except Exception:
+            pass
+
+    # Put time column first if present
+    time_like = [c for c in df.columns if c.lower().startswith("time")]
+    if time_like:
+        time_col = time_like[0]
+        other_cols = [c for c in df.columns if c != time_col]
+        df = df[[time_col] + other_cols]
+
+    return df.reset_index(drop=True)
