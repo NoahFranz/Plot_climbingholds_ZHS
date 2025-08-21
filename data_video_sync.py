@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import sys
 import os
+import datetime
 from typing import Optional, Tuple, List
 import uuid
 
@@ -59,21 +60,63 @@ from tkinter import ttk, filedialog, messagebox
 # LVM LOADING
 # -----------------------------
 
-def load_lvm(path: str, time_col: Optional[str] = None) -> Tuple[pd.DataFrame, str]:
-    """Load a National Instruments .lvm file.
-
-    Tries project-specific loader from loadData.py first, then falls back to a
-    simple, resilient parser. Returns (DataFrame, time_column_name).
+def load_excel(path: str, time_col: Optional[str] = None) -> Tuple[pd.DataFrame, str]:
+    """Load Excel file with LVM-compatible structure.
+    
+    Expects Excel file with 21 header rows followed by column headers in row 22.
+    Returns (DataFrame, time_column_name).
     """
     # Check if file exists and has content
     if not os.path.exists(path):
-        raise FileNotFoundError(f"LVM file not found: {path}")
+        raise FileNotFoundError(f"Excel file not found: {path}")
     
     file_size = os.path.getsize(path)
     if file_size == 0:
-        raise ValueError(f"LVM file is empty: {path}")
+        raise ValueError(f"Excel file is empty: {path}")
     
-    print(f"[load_lvm] Loading file: {path} (size: {file_size} bytes)")
+    print(f"[load_excel] Loading Excel file: {path} (size: {file_size} bytes)")
+    
+    try:
+        # Read Excel file, skip first 21 rows (like LVM format)
+        df = pd.read_excel(path, header=21, engine='openpyxl')
+        
+        # Clean column names (remove units in brackets and strip whitespace)
+        df.columns = [str(col).split('[')[0].strip() for col in df.columns]
+        
+        # Remove any columns containing "Comment", "X_values", or "adc" (like LVM)
+        df = df[[col for col in df.columns if not any(x in str(col).lower() for x in ['comment', 'x_values', 'adc'])]]
+        
+        # Pick time column
+        tcol = _pick_time_col(df, user_time_col=time_col)
+        
+        print(f"[load_excel] Successfully loaded Excel file with {len(df)} rows and {len(df.columns)} columns")
+        return df.reset_index(drop=True), tcol
+        
+    except Exception as e:
+        print(f"[load_excel] Error loading Excel file: {e}")
+        raise ValueError(f"Error loading Excel file: {e}")
+
+def load_lvm(path: str, time_col: Optional[str] = None) -> Tuple[pd.DataFrame, str]:
+    """Load a National Instruments .lvm file or Excel file.
+
+    Automatically detects file type and routes to appropriate loader.
+    Returns (DataFrame, time_column_name).
+    """
+    # Check if file exists and has content
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"File not found: {path}")
+    
+    file_size = os.path.getsize(path)
+    if file_size == 0:
+        raise ValueError(f"File is empty: {path}")
+    
+    # Detect file type and route to appropriate loader
+    file_ext = os.path.splitext(path)[1].lower()
+    if file_ext in ['.xlsx', '.xls']:
+        print(f"[load_lvm] Detected Excel file: {path}")
+        return load_excel(path, time_col)
+    else:
+        print(f"[load_lvm] Loading LVM file: {path} (size: {file_size} bytes)")
     # Try loadData.py if present in project
     try:
         import importlib
@@ -305,31 +348,49 @@ def format_legend(label: str) -> str:
     """Format legend so that force axis and side are both in the subscript (index).
 
     Examples (Matplotlib mathtext):
-      - 'Fy_2' -> '$F_{L,y}$'
-      - 'Fx_1' -> '$F_{R,x}$'
+      - 'Fy_2' -> '$F_{y,L}$'
+      - 'Fx_1' -> '$F_{x,R}$'
       - 'Fy_sum' -> '$F_{y,sum}$'
-      - 'Fres_xyz_2' -> '$F_{L,xyz}$'
-      - 'Mz_1' -> '$M_{R,z}$'
+      - 'Fres_xyz_2' -> '$F_{res,L}$'
+      - 'FgR_1' -> '$F_{gR,1}$'
+      - 'FgR_sum' -> '$F_{gR,sum}$'
     """
     name = str(label)
     # Strip unit suffix
     if '[' in name:
         name = name.split('[')[0].strip()
+    
+    # Handle FgR columns specially
+    if 'FgR' in name:
+        if 'sum' in name.lower():
+            return r'$F_{gR,sum}$'
+        else:
+            # Extract side number (1 or 2)
+            if '_1' in name:
+                return r'$F_{gR,1}$'
+            elif '_2' in name:
+                return r'$F_{gR,2}$'
+            else:
+                return r'$F_{gR}$'
+    
     # Determine base symbol (F or M)
     base_symbol = 'F'
     if name.startswith('M'):
         base_symbol = 'M'
+    
     # Side token
     side_token = ''
     if '_1' in name:
         side_token = 'R'
     elif '_2' in name:
         side_token = 'L'
+    
     # Sum token
     is_sum = '_sum' in name
+    
     # Axis token
     if name.startswith('Fres_xyz') or name.startswith('Mres_xyz'):
-        axis = 'xyz'
+        axis = 'res'
     elif name.startswith('Fres_yz') or name.startswith('Mres_yz'):
         axis = 'yz'
     elif name.startswith(('Fx', 'Mx')):
@@ -340,14 +401,16 @@ def format_legend(label: str) -> str:
         axis = 'z'
     else:
         axis = ''
-    # Compose label: base with side and axis (and optional sum) in subscript
+    
+    # Compose label: F_index(y,L) format - axis first, then side
     parts = []
-    if side_token:
-        parts.append(side_token)
     if axis:
         parts.append(axis)
+    if side_token:
+        parts.append(side_token)
     if is_sum:
         parts.append('sum')
+    
     if parts:
         return f"${base_symbol}_{{{','.join(parts)}}}$"
     return f"${base_symbol}$"
@@ -996,6 +1059,7 @@ def play_two_videos_with_live_plot(
     start_at_video_time: Optional[float] = None,
     export_video: bool = False,
     export_path: Optional[str] = None,
+    silent_export: bool = False,
 ):
     # Load LVM
     df, tcol = load_lvm(lvm_path, time_col)
@@ -1256,7 +1320,9 @@ def play_two_videos_with_live_plot(
             
 
 
-            cv2.imshow(win_name, canvas)
+            # Only show video windows if not in silent export mode
+            if not silent_export:
+                cv2.imshow(win_name, canvas)
             
             # Write frame to video if exporting
             if video_writer is not None and not paused:
@@ -1333,26 +1399,34 @@ def play_two_videos_with_live_plot(
             cap1.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             cap2.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
 
-        # Keyboard - always process keys, even when paused
-        wait_time = int(max(1, (1000 / max(fps1, fps2)) / max(0.25, speed))) if not paused else 30  # Longer wait when paused
-        key = cv2.waitKey(wait_time) & 0xFF
-        if key in (ord('q'), 27):  # q or ESC
-            break
-        elif key == ord(' '):
-            paused = not paused
-        elif key in (ord('+'), ord('=')):
-            speed = min(2.0, speed * 1.25)
-        elif key in (ord('-'), ord('_')):
-            speed = max(0.25, speed / 1.25)
-        # --- Jump controls ---
-        elif key in (81, ord('a'), ord('A')):  # Left arrow or 'a' -> -2s
-            _jump_seconds(-2.0)
-        elif key in (83, ord('d'), ord('D')):  # Right arrow or 'd' -> +2s
-            _jump_seconds(+2.0)
-        elif key in (ord('s'), ord('S')):      # 's' -> +5s
-            _jump_seconds(+10.0)
-        elif key in (ord('f'), ord('F')):      # 'f' -> -5s
-            _jump_seconds(-10.0)
+        # Keyboard handling - skip if silent export
+        if not silent_export:
+            wait_time = int(max(1, (1000 / max(fps1, fps2)) / max(0.25, speed))) if not paused else 30  # Longer wait when paused
+            key = cv2.waitKey(wait_time) & 0xFF
+            if key in (ord('q'), 27):  # q or ESC
+                break
+            elif key == ord(' '):
+                paused = not paused
+            elif key in (ord('+'), ord('=')):
+                speed = min(2.0, speed * 1.25)
+            elif key in (ord('-'), ord('_')):
+                speed = max(0.25, speed / 1.25)
+            # --- Jump controls ---
+            elif key in (81, ord('a'), ord('A')):  # Left arrow or 'a' -> -2s
+                _jump_seconds(-2.0)
+            elif key in (83, ord('d'), ord('D')):  # Right arrow or 'd' -> +2s
+                _jump_seconds(+2.0)
+            elif key in (ord('s'), ord('S')):      # 's' -> +5s
+                _jump_seconds(+10.0)
+        else:
+            # In silent export mode, just process frames without waiting for key input
+            # Use a minimal delay to prevent excessive CPU usage
+            cv2.waitKey(1)
+            
+        # Additional keyboard controls (only when not in silent export mode)
+        if not silent_export:
+            if key in (ord('f'), ord('F')):      # 'f' -> -5s
+                _jump_seconds(-10.0)
 
     cap1.release(); cap2.release(); cv2.destroyAllWindows()
     
@@ -1360,6 +1434,38 @@ def play_two_videos_with_live_plot(
     if video_writer is not None:
         video_writer.release()
         print(f"[export] Video export completed: {export_path}")
+        
+        # Save export details
+        if export_path:
+            # Create details filename (replace .mp4 with .txt)
+            details_path = export_path.replace('.mp4', '_details.txt')
+            
+            # Collect all settings (simplified version for global scope)
+            details = {
+                "Export Date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "Export Path": export_path,
+                "Video 1": vid1_path,
+                "Video 2": vid2_path,
+                "LVM File": lvm_path,
+                "Data Columns": lvm_col,
+                "Time Column": time_col,
+                "LVM Offset": lvm_offset,
+                "Video 1 Offset": v1_offset,
+                "Video 2 Offset": v2_offset,
+                "Downsample": downsample,
+                "Title": title,
+            }
+            
+            # Write to file
+            try:
+                with open(details_path, 'w', encoding='utf-8') as f:
+                    f.write("ICHs Video Export Details\n")
+                    f.write("=" * 50 + "\n\n")
+                    for key, value in details.items():
+                        f.write(f"{key}: {value}\n")
+                print(f"[export] Details saved to: {details_path}")
+            except Exception as e:
+                print(f"[export] Warning: Could not save details: {e}")
     
     plt.ioff(); plt.show(block=False)
 
@@ -1386,17 +1492,22 @@ def launch_gui():
             mp4s = sorted(mp4s, key=lambda p: os.path.getmtime(p))
             lvms = glob.glob(os.path.join(base_dir, "*.lvm"))
             lvms = sorted(lvms, key=lambda p: os.path.getmtime(p))
+            excels = glob.glob(os.path.join(base_dir, "*.xlsx")) + glob.glob(os.path.join(base_dir, "*.xls"))
+            excels = sorted(excels, key=lambda p: os.path.getmtime(p))
         except Exception:
-            mp4s, lvms = [], []
-        # pick two most-recent mp4s and the most-recent lvm
+            mp4s, lvms, excels = [], [], []
+        # pick two most-recent mp4s and the most-recent lvm/excel
         vid2 = mp4s[-1] if len(mp4s) >= 1 else ""
         vid1 = mp4s[-2] if len(mp4s) >= 2 else ""
-        lvm  = lvms[-1] if len(lvms) >= 1 else ""
+        # Prefer LVM over Excel files
+        lvm = lvms[-1] if len(lvms) >= 1 else (excels[-1] if len(excels) >= 1 else "")
         return vid1, vid2, lvm
 
     _def_vid1, _def_vid2, _def_lvm = _auto_pick_files(default_dir)
+    _def_dir = default_dir  # Add the missing variable
 
     # Variables
+    folder_var = tk.StringVar(value=_def_dir)
     vid1_var = tk.StringVar(value=_def_vid1)
     vid2_var = tk.StringVar(value=_def_vid2)
     lvm_var  = tk.StringVar(value=_def_lvm)
@@ -1418,12 +1529,189 @@ def launch_gui():
     motion_roi_rel = [0.6, 0.2, 0.35, 0.6]
     # Video export options
     export_video_var = tk.BooleanVar(value=False)
+    silent_export_var = tk.BooleanVar(value=False)  # Silent export without playback
     export_path_var = tk.StringVar(value="")
     guid_var = tk.StringVar(value=str(uuid.uuid4()))
     status_var = tk.StringVar(value=f"GUID: {guid_var.get()}")
 
     def browse_file(var: tk.StringVar, types):
         path = filedialog.askopenfilename(filetypes=types)
+        if path:
+            var.set(path)
+    
+    def browse_folder_and_auto_detect(var: tk.StringVar):
+        """Browse for folder and automatically detect files."""
+        path = filedialog.askdirectory(title="Select folder containing video and LVM files")
+        if path:
+            var.set(path)
+            auto_detect_files_from_folder(var)
+    
+    def auto_detect_files_from_folder(var: tk.StringVar):
+        """Automatically detect video and LVM files from the selected folder."""
+        folder_path = var.get().strip()
+        if not folder_path or not os.path.exists(folder_path):
+            status_var.set("Error: Invalid folder path")
+            return
+        
+        try:
+            # Find all MP4, LVM, and Excel files in the folder
+            mp4_files = glob.glob(os.path.join(folder_path, "*.mp4"))
+            lvm_files = glob.glob(os.path.join(folder_path, "*.lvm"))
+            excel_files = glob.glob(os.path.join(folder_path, "*.xlsx")) + glob.glob(os.path.join(folder_path, "*.xls"))
+            
+            # Find backV and sideV videos
+            backv_files = [f for f in mp4_files if 'backV' in os.path.basename(f)]
+            sidev_files = [f for f in mp4_files if 'sideV' in os.path.basename(f)]
+            
+            # Set found files
+            if backv_files:
+                vid1_var.set(backv_files[0])
+                print(f"[auto_detect] Found backV: {os.path.basename(backv_files[0])}")
+            else:
+                vid1_var.set("")
+                print("[auto_detect] No backV video found")
+            
+            if sidev_files:
+                vid2_var.set(sidev_files[0])
+                print(f"[auto_detect] Found sideV: {os.path.basename(sidev_files[0])}")
+            else:
+                vid2_var.set("")
+                print("[auto_detect] No sideV video found")
+            
+            # Check for LVM files first, then Excel files
+            if lvm_files:
+                lvm_var.set(lvm_files[0])
+                print(f"[auto_detect] Found LVM: {os.path.basename(lvm_files[0])}")
+                # Auto-load LVM columns
+                load_lvm_and_fill()
+            elif excel_files:
+                lvm_var.set(excel_files[0])
+                print(f"[auto_detect] Found Excel: {os.path.basename(excel_files[0])}")
+                # Auto-load Excel columns
+                load_lvm_and_fill()
+            else:
+                lvm_var.set("")
+                print("[auto_detect] No LVM or Excel file found")
+            
+            # Update status
+            found_count = len(backv_files) + len(sidev_files) + len(lvm_files) + len(excel_files)
+            status_var.set(f"Auto-detected {found_count} files from folder")
+            
+        except Exception as e:
+            status_var.set(f"Error auto-detecting files: {e}")
+            print(f"[auto_detect] Error: {e}")
+    
+    def generate_export_filename() -> str:
+        """Generate automatic filename based on current settings."""
+        # Extract file number from LVM filename
+        lvm_filename = os.path.basename(lvm_var.get().strip()) if lvm_var.get().strip() else "unknown"
+        file_number = ""
+        if lvm_filename:
+            # Try to extract number from filename (e.g., "040-Hold-02" -> "040")
+            import re
+            match = re.search(r'(\d{3})', lvm_filename)
+            if match:
+                file_number = match.group(1)
+        
+        # Get current settings
+        detecting_hold = hold_side_var.get()
+        matching_force = match_force_var.get()
+        lvm_offset = offset_var.get()
+        v1_offset = v1_off_var.get()
+        v2_offset = v2_off_var.get()
+        sync_method = sync_method_var.get()
+        motion_video = motion_video_var.get() if sync_method == "motion" else ""
+        metric = motion_metric_var.get() if sync_method == "motion" else ""
+        
+        # Build filename components
+        parts = []
+        if file_number:
+            parts.append(f"{file_number}")
+        parts.append(f"hold{detecting_hold}")
+        parts.append(f"force{matching_force}")
+        parts.append(f"lvm{lvm_offset:+g}")
+        parts.append(f"v1{v1_offset:+g}")
+        parts.append(f"v2{v2_offset:+g}")
+        parts.append(f"{sync_method}")
+        if sync_method == "motion":
+            parts.append(f"{motion_video}")
+            parts.append(f"{metric}")
+        
+        # Join with underscores
+        filename = "_".join(parts) + ".mp4"
+        return filename
+    
+    def save_export_details(export_path: str):
+        """Save detailed export settings to a companion .txt file."""
+        if not export_path:
+            return
+        
+        # Create details filename (replace .mp4 with .txt)
+        details_path = export_path.replace('.mp4', '_details.txt')
+        
+        # Collect all settings
+        details = {
+            "Export Date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "LVM File": lvm_var.get().strip(),
+            "Video 1": vid1_var.get().strip(),
+            "Video 2": vid2_var.get().strip(),
+            "Time Column": time_col_var.get(),
+            "Data Columns": data_col_var.get(),
+            "Detecting Hold": hold_side_var.get(),
+            "Matching Force": match_force_var.get(),
+            "LVM Offset": offset_var.get(),
+            "Video 1 Offset": v1_off_var.get(),
+            "Video 2 Offset": v2_off_var.get(),
+            "Downsample": down_var.get(),
+            "Auto Sync": auto_sync_var.get(),
+            "Sync Method": sync_method_var.get(),
+        }
+        
+        # Add motion-specific details
+        if sync_method_var.get() == "motion":
+            details.update({
+                "Motion Video": motion_video_var.get(),
+                "Motion Metric": motion_metric_var.get(),
+                "Motion Threshold": motion_threshold_var.get(),
+                "Motion ROI": f"x={motion_roi_rel[0]:.3f}, y={motion_roi_rel[1]:.3f}, w={motion_roi_rel[2]:.3f}, h={motion_roi_rel[3]:.3f}",
+            })
+        
+        # Write to file
+        try:
+            with open(details_path, 'w', encoding='utf-8') as f:
+                f.write("ICHs Video Export Details\n")
+                f.write("=" * 50 + "\n\n")
+                for key, value in details.items():
+                    f.write(f"{key}: {value}\n")
+            print(f"[export] Details saved to: {details_path}")
+        except Exception as e:
+            print(f"[export] Warning: Could not save details: {e}")
+    
+    def browse_export_path(var: tk.StringVar):
+        """Browse for export path allowing both folder and filename selection."""
+        # Generate automatic filename
+        auto_filename = generate_export_filename()
+        
+        # Start with current export path if it exists
+        current_path = var.get().strip()
+        if current_path:
+            # Extract directory from current path
+            if current_path.lower().endswith('.mp4'):
+                initial_dir = os.path.dirname(current_path)
+            else:
+                initial_dir = current_path
+        else:
+            # Default to video directory
+            initial_dir = os.path.dirname(vid1_var.get().strip()) if vid1_var.get().strip() else ""
+        
+        # Use asksaveasfilename to allow creating new files
+        path = filedialog.asksaveasfilename(
+            title="Save exported video as...",
+            initialdir=initial_dir,
+            initialfile=auto_filename,
+            defaultextension=".mp4",
+            filetypes=[("MP4 video", "*.mp4"), ("All files", "*.*")]
+        )
         if path:
             var.set(path)
 
@@ -1617,6 +1905,7 @@ def launch_gui():
                 start_at_video_time=(start_time if auto_sync_var.get() else None),
                 export_video=export_video_var.get(),
                 export_path=export_path_var.get() if export_video_var.get() else None,
+                silent_export=silent_export_var.get(),
             )
         except Exception as e:
             messagebox.showerror("Run failed", str(e))
@@ -1627,64 +1916,73 @@ def launch_gui():
             root.deiconify()
 
     # Layout helpers
-    def row(parent, r, label, widget, button=None):
+    def row(parent, r, label, widget, button=None, button2=None):
         ttk.Label(parent, text=label, width=18).grid(row=r, column=0, sticky="e", padx=6, pady=4)
         widget.grid(row=r, column=1, sticky="we", padx=6, pady=4)
         if button:
             button.grid(row=r, column=2, sticky="w", padx=6, pady=4)
+        if button2:
+            button2.grid(row=r, column=3, sticky="w", padx=6, pady=4)
 
-    # Auto-load LVM file and detect columns if files are found
+    # Auto-load LVM/Excel file and detect columns if files are found
     def auto_load_files():
         if _def_lvm and os.path.exists(_def_lvm):
             lvm_var.set(_def_lvm)
             load_lvm_and_fill()
-            status_var.set(f"Auto-loaded: {os.path.basename(_def_lvm)}")
+            file_type = "Excel" if _def_lvm.lower().endswith(('.xlsx', '.xls')) else "LVM"
+            status_var.set(f"Auto-loaded {file_type}: {os.path.basename(_def_lvm)}")
         else:
-            status_var.set("No LVM file found in default directory")
+            status_var.set("No LVM or Excel file found in default directory")
 
     frm = ttk.Frame(root, padding=10)
     frm.pack(fill="both", expand=True)
     frm.columnconfigure(1, weight=1)
 
+    # Folder selector
+    folder_entry = ttk.Entry(frm, textvariable=folder_var)
+    folder_btn = ttk.Button(frm, text="Browse Folder", command=lambda: browse_folder_and_auto_detect(folder_var))
+    auto_detect_btn = ttk.Button(frm, text="Auto Detect", command=lambda: auto_detect_files_from_folder(folder_var))
+    row(frm, 0, "Data Folder:", folder_entry, folder_btn, auto_detect_btn)
+
     # File selectors
     v1_entry = ttk.Entry(frm, textvariable=vid1_var)
     v1_btn = ttk.Button(frm, text="Browse…", command=lambda: browse_file(vid1_var, [("Video", "*.mp4 *.MP4")]))
-    row(frm, 0, "Video 1 (backV) (MP4):", v1_entry, v1_btn)
+    row(frm, 1, "Video 1 (backV) (MP4):", v1_entry, v1_btn)
 
     v2_entry = ttk.Entry(frm, textvariable=vid2_var)
     v2_btn = ttk.Button(frm, text="Browse…", command=lambda: browse_file(vid2_var, [("Video", "*.mp4 *.MP4")]))
-    row(frm, 1, "Video 2 (sideV) (MP4):", v2_entry, v2_btn)
+    row(frm, 2, "Video 2 (sideV) (MP4):", v2_entry, v2_btn)
 
     lvm_entry = ttk.Entry(frm, textvariable=lvm_var)
-    lvm_btn = ttk.Button(frm, text="Browse…", command=lambda: browse_file(lvm_var, [("LVM", "*.lvm *.LVM"), ("All files", "*.*")]))
-    row(frm, 2, "LVM File:", lvm_entry, lvm_btn)
+    lvm_btn = ttk.Button(frm, text="Browse…", command=lambda: browse_file(lvm_var, [("LVM", "*.lvm *.LVM"), ("Excel", "*.xlsx *.xls"), ("All files", "*.*")]))
+    row(frm, 3, "LVM File:", lvm_entry, lvm_btn)
 
     # Column selectors
     time_cb = ttk.Combobox(frm, textvariable=time_col_var, values=[], state="readonly")
     # Allow typing multiple tokens (comma-separated) in the data column field
     data_cb = ttk.Combobox(frm, textvariable=data_col_var, values=[], state="normal")
     load_btn = ttk.Button(frm, text="Detect Columns", command=load_lvm_and_fill)
-    row(frm, 3, "Time column:", time_cb, load_btn)
-    row(frm, 4, "Data column:", data_cb, None)
+    row(frm, 4, "Time column:", time_cb, load_btn)
+    row(frm, 5, "Data column:", data_cb, None)
     # Hint for multi-column selection (own row for more vertical space)
     ttk.Label(
         frm,
         text="Tip: You can enter up to 3 tokens, comma-separated (e.g., Fy, Fz, Fres_xyz)",
         wraplength=750,
         justify="left"
-    ).grid(row=5, column=1, columnspan=2, sticky="w", padx=6, pady=(0, 8))
+    ).grid(row=6, column=1, columnspan=2, sticky="w", padx=6, pady=(0, 8))
 
     # Detecting hold selector
     hold_cb = ttk.Combobox(frm, textvariable=hold_side_var, values=["G2L", "G1R"], state="readonly")
-    row(frm, 6, "Detecting hold:", hold_cb, None)
+    row(frm, 7, "Detecting hold:", hold_cb, None)
 
     # Matching force selector
     mf_cb = ttk.Combobox(frm, textvariable=match_force_var, values=["Fy", "Fz", "Fx", "Fres_xyz", "FgR"], state="readonly")
-    row(frm, 7, "Matching force:", mf_cb, None)
+    row(frm, 8, "Matching force:", mf_cb, None)
 
     # Numeric params
     off_entry = ttk.Entry(frm, textvariable=offset_var)
-    row(frm, 8, "LVM offset [s]:", off_entry, None)
+    row(frm, 9, "LVM offset [s]:", off_entry, None)
     # Explanation for LVM offset
     ttk.Label(
         frm,
@@ -1692,27 +1990,27 @@ def launch_gui():
         wraplength=750,
         justify="left",
         foreground="#666"
-    ).grid(row=9, column=1, columnspan=2, sticky="w", padx=6, pady=(0, 8))
+    ).grid(row=10, column=1, columnspan=2, sticky="w", padx=6, pady=(0, 8))
 
     v1off_entry = ttk.Entry(frm, textvariable=v1_off_var)
-    row(frm, 10, "Video 1 offset [s]:", v1off_entry, None)
+    row(frm, 11, "Video 1 offset [s]:", v1off_entry, None)
 
     v2off_entry = ttk.Entry(frm, textvariable=v2_off_var)
-    row(frm, 11, "Video 2 offset [s]:", v2off_entry, None)
+    row(frm, 12, "Video 2 offset [s]:", v2off_entry, None)
 
     down_entry = ttk.Entry(frm, textvariable=down_var)
-    row(frm, 12, "Downsample (N):", down_entry, None)
+    row(frm, 13, "Downsample (N):", down_entry, None)
 
     title_entry = ttk.Entry(frm, textvariable=title_var)
-    row(frm, 13, "Plot title:", title_entry, None)
+    row(frm, 14, "Plot title:", title_entry, None)
 
     # Status + actions
     status = ttk.Label(frm, textvariable=status_var, foreground="#555")
-    status.grid(row=14, column=0, columnspan=3, sticky="w", padx=6, pady=(12, 4))
+    status.grid(row=15, column=0, columnspan=3, sticky="w", padx=6, pady=(12, 4))
 
     # Auto-sync toggle
     sync_row = ttk.Frame(frm)
-    sync_row.grid(row=15, column=0, columnspan=3, sticky="we", padx=6, pady=(8, 4))
+    sync_row.grid(row=16, column=0, columnspan=3, sticky="we", padx=6, pady=(8, 4))
     ttk.Checkbutton(sync_row, text="Auto sync", variable=auto_sync_var).pack(side="left", padx=(0,8))
     ttk.Label(sync_row, text="Method:").pack(side="left")
     ttk.Combobox(sync_row, values=["marker", "motion"], textvariable=sync_method_var, state="readonly", width=10).pack(side="left", padx=(6,0))
@@ -1728,15 +2026,16 @@ def launch_gui():
 
     # Video export controls
     export_row = ttk.Frame(frm)
-    export_row.grid(row=16, column=0, columnspan=3, sticky="we", padx=6, pady=(8, 4))
+    export_row.grid(row=17, column=0, columnspan=3, sticky="we", padx=6, pady=(8, 4))
     ttk.Checkbutton(export_row, text="Export video", variable=export_video_var).pack(side="left", padx=(0,8))
+    ttk.Checkbutton(export_row, text="Silent export", variable=silent_export_var).pack(side="left", padx=(0,8))
     export_entry = ttk.Entry(export_row, textvariable=export_path_var, width=50)
     export_entry.pack(side="left", padx=(0,8))
-    ttk.Button(export_row, text="Browse...", command=lambda: browse_file(export_path_var, [("MP4", "*.mp4")])).pack(side="left", padx=(0,8))
+    ttk.Button(export_row, text="Browse...", command=lambda: browse_export_path(export_path_var)).pack(side="left", padx=(0,8))
     ttk.Label(export_row, text="(Optional: export combined video with live plot)").pack(side="left", padx=(8,0))
 
     btns = ttk.Frame(frm)
-    btns.grid(row=17, column=0, columnspan=3, sticky="e", padx=6, pady=8)
+    btns.grid(row=18, column=0, columnspan=3, sticky="e", padx=6, pady=8)
     ttk.Button(btns, text="Start", command=start_run).pack(side="right", padx=6)
     ttk.Button(btns, text="Quit", command=root.destroy).pack(side="right", padx=6)
 
@@ -1753,7 +2052,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Play two videos with live LVM plot (synced)")
     p.add_argument('--vid1', type=str, required=False, default='/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/video_sync/039_backV_Gr_red-standard_GX010853.mp4', help='Path to first MP4')
     p.add_argument('--vid2', type=str, required=False, default='/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/video_sync/039_sideV_Gr_red-standard_GX010247.mp4', help='Path to second MP4')
-    p.add_argument('--lvm',  type=str, required=False, default='/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/video_sync/039-Hold-01_Red_Standard_73kg_Noah_lvl-ADV_25-05-14_1030.lvm', help='Path to .lvm file')
+    p.add_argument('--lvm',  type=str, required=False, default='/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/video_sync/039-Hold-01_Red_Standard_73kg_Noah_lvl-ADV_25-05-14_1030.lvm', help='Path to .lvm or .xlsx/.xls file')
     p.add_argument('--col', type=str, required=False, default=None,
                    help='Column token to plot (e.g., Fy, Fz, Fx, Mz). Token matches multiple columns (e.g., Fy_1 and Fy_2). Optional when using --gui.')
     p.add_argument('--time-col', type=str, default=None, help='Name of time column in LVM (auto-detected if omitted)')
