@@ -338,8 +338,15 @@ from typing import Optional
 def color_for_label(label: str) -> Optional[str]:
     """Pick a matplotlib color hex from config.COLOR_MAPPING for a given label."""
     try:
-        key = _base_key_for_color(label)
-        return config.COLOR_MAPPING.get(key)
+        
+        if "FgR_1" in label:    
+            return "red"            
+        elif "FgR_2" in label:
+            return "blue"
+        else:
+            key = _base_key_for_color(label)
+            return config.COLOR_MAPPING.get(key)
+
     except Exception:
         return None
 
@@ -1123,38 +1130,57 @@ def play_two_videos_with_live_plot(
     # To avoid drift, we map each stream to its own t and average their t, 
     # which is robust when fps differ slightly
     paused = False
-    speed = 1.0
+    speed = 2.0  # Increased from 1.0 to 2.0 for faster playback
 
-    # Matplotlib live figure
-    plt.ion()
-    fig, ax = plt.subplots(figsize=(7, 3))
-    default_name = _file_acronym_from_path(lvm_path)
-    fig.canvas.manager.set_window_title(title or f"{default_name} – {lvm_col}")
-    ax.set_xlabel('Time [s]')
-    # Always show Y axis in percent of body weight
-    ax.set_ylabel("F [%BW]")
-    # keep a scrolling window of last N seconds
-    window_s = 10.0
+    # Matplotlib live figure - only create if not in silent export mode
+    fig = None
+    ax = None
     lines = {}
-    # Dynamic force value text objects
     force_texts = {}
-    for c in plot_cols:
-        line_color = color_for_label(c) or None
-        lobj, = ax.plot([], [], lw=2, label=format_legend(str(c)), color=line_color)
-        lines[c] = lobj
-        # Create text object for current force value
-        text_obj = ax.text(0.02, 0.98, '', transform=ax.transAxes, 
-                          fontsize=9, verticalalignment='top',
-                          bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
-        force_texts[c] = text_obj
-    if plot_cols:
-        # Smart legend positioning to avoid overlap
-        if len(plot_cols) <= 2:
-            ax.legend(loc='upper right', bbox_to_anchor=(1.0, 1.0))
-        else:
-            # For 3+ plots, use upper left to avoid overlap with force values
-            ax.legend(loc='upper left', bbox_to_anchor=(0.0, 1.0))
-    ax.grid(True, linestyle=':')
+    window_s = 10.0
+    
+    if not silent_export:
+        plt.ion()
+        fig, ax = plt.subplots(figsize=(7, 3))
+        default_name = _file_acronym_from_path(lvm_path)
+        # Set window title
+        if fig.canvas.manager:
+            fig.canvas.manager.set_window_title(title or f"{default_name} – {lvm_col}")
+        ax.set_xlabel('Time [s]')
+        # Always show Y axis in percent of body weight
+        ax.set_ylabel("F [%BW]")
+        
+        # Dynamic force value text objects
+        for c in plot_cols:
+            line_color = color_for_label(c) or None
+            lobj, = ax.plot([], [], lw=2, label=format_legend(str(c)), color=line_color)
+            lines[c] = lobj
+            print(f"Created plot line for {c}: {lobj}, color: {line_color}")
+            
+            # Create text object for current force value
+            text_obj = ax.text(0.02, 0.98, '', transform=ax.transAxes, 
+                              fontsize=9, verticalalignment='top',
+                              bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+            force_texts[c] = text_obj
+        
+        print(f"Total plot lines created: {len(lines)}")
+        print(f"Plot columns: {plot_cols}")
+        print(f"Lines dictionary keys: {list(lines.keys())}")
+        
+        if plot_cols:
+            # Smart legend positioning to avoid overlap
+            if len(plot_cols) <= 2:
+                ax.legend(loc='upper right', bbox_to_anchor=(1.0, 1.0))
+            else:
+                # For 3+ plots, use upper left to avoid overlap with force values
+                ax.legend(loc='upper left', bbox_to_anchor=(0.0, 1.0))
+            
+        ax.grid(True, linestyle=':')
+        
+        # Set initial y-axis limits with 30 range centered around 0
+        ax.set_ylim(-15, 15)
+
+
 
     # Buffers for the last window, per column
     buffers = {c: {"t": [], "y": []} for c in plot_cols}
@@ -1164,10 +1190,18 @@ def play_two_videos_with_live_plot(
     out_w = w1 + w2
     win_name = "ICHs: Dual video + live plot (focus this window for keys)"
     
-    # Export canvas dimensions (2-row layout: videos on top, plot on bottom)
+    # Export canvas dimensions (conditional based on export mode)
     plot_height = int(out_h * 0.5)  # Plot is 50% of video height
-    export_h = out_h + plot_height
-    export_w = max(w1 + w2, 1200)  # Ensure minimum width for plot
+    if silent_export:
+        # In silent export mode, only export videos (no plot height needed)
+        export_h = out_h
+        export_w = w1 + w2  # Just the width needed for videos
+        print(f"[export] Silent export mode: Export dimensions {export_w}x{export_h} (videos only)")
+    else:
+        # In normal mode, export videos + plot
+        export_h = out_h + plot_height
+        export_w = max(w1 + w2, 1200)  # Ensure minimum width for plot
+        print(f"[export] Normal export mode: Export dimensions {export_w}x{export_h} (videos + plot)")
     
     # Video export setup
     video_writer = None
@@ -1196,7 +1230,10 @@ def play_two_videos_with_live_plot(
         else:
             print(f"[export] Starting video export to: {export_path}")
             print(f"[export] Output resolution: {export_w}x{export_h}, FPS: {fps_out}")
-            print(f"[export] Layout: Videos ({w1}x{h1} + {w2}x{h2}) + Live plot ({plot_height}px height)")
+            if silent_export:
+                print(f"[export] Layout: Videos only ({w1}x{h1} + {w2}x{h2})")
+            else:
+                print(f"[export] Layout: Videos ({w1}x{h1} + {w2}x{h2}) + Live plot ({plot_height}px height)")
 
     # Optional: start both videos at a specific wall-clock time (seconds)
     start_t = float(start_at_video_time) if (start_at_video_time is not None) else 0.0
@@ -1232,35 +1269,56 @@ def play_two_videos_with_live_plot(
                 by = buffers[cname]["y"]
                 while bt and bt[0] < t_min:
                     bt.pop(0); by.pop(0)
-                # Update line data
-                lines[cname].set_data(bt, by)
-                # Update dynamic force value text
-                if cname in force_texts:
-                    text_obj = force_texts[cname]
-                    text_obj.set_text(f"{format_legend(str(cname))}: {current_val:.1f}%")
-                    # Position text objects vertically stacked, avoid legend overlap
-                    text_idx = list(force_texts.keys()).index(cname)
-                    if len(plot_cols) <= 2:
-                        # For 1-2 plots: use top-left (legend is top-right)
-                        text_obj.set_position((0.02, 0.98 - text_idx * 0.08))
-                    else:
-                        # For 3+ plots: use top-right (legend is top-left)
-                        text_obj.set_position((0.98, 0.98 - text_idx * 0.08))
+                # Update line data only if not in silent export mode
+                if not silent_export and cname in lines:
+                    print(f"Updating line for {cname}: {len(bt)} time points, {len(by)} values")
+                    lines[cname].set_data(bt, by)
+                    
+                    # Update dynamic force value text (only if not in silent export mode)
+                    if not silent_export and cname in force_texts:
+                        text_obj = force_texts[cname]
+                        text_obj.set_text(f"{format_legend(str(cname))}: {current_val:.1f}%")
+                        # Position text objects vertically stacked, avoid legend overlap
+                        text_idx = list(force_texts.keys()).index(cname)
+                        if len(plot_cols) <= 2:
+                            # For 1-2 plots: use top-left (legend is top-right)
+                            text_obj.set_position((0.02, 0.98 - text_idx * 0.08))
+                        else:
+                            # For 3+ plots: use top-right (legend is top-left)
+                            text_obj.set_position((0.98, 0.98 - text_idx * 0.08))
+                else:
+                    if not silent_export:
+                        print(f"Warning: {cname} not in lines dict. Available: {list(lines.keys())}")
 
-            ax.set_xlim(max(0.0, t_min), max(window_s, t_now))
+            # Update plot limits only if not in silent export mode
+            if not silent_export and ax is not None:
+                # Set x-axis limits to show current window
+                ax.set_xlim(max(0.0, t_min), t_now + 1.0)
             # Auto-scale y with margins across all series
             all_vals = []
             for cname in plot_cols:
                 all_vals.extend(buffers[cname]["y"])
-            if len(all_vals) > 1:
-                yv = np.array(all_vals, dtype=float)
-                ymin, ymax = float(np.nanmin(yv)), float(np.nanmax(yv))
-                if np.isfinite(ymin) and np.isfinite(ymax):
-                    if ymin == ymax:
-                        ymin -= 1.0; ymax += 1.0
-                    pad = 0.05 * (ymax - ymin)
-                    ax.set_ylim(ymin - pad, ymax + pad)
-            fig.canvas.draw(); fig.canvas.flush_events()
+            # Update plot only if not in silent export mode
+            if not silent_export and ax is not None:
+                if len(all_vals) > 1:
+                    yv = np.array(all_vals, dtype=float)
+                    ymin, ymax = float(np.nanmin(yv)), float(np.nanmax(yv))
+                    if np.isfinite(ymin) and np.isfinite(ymax):
+                        if ymin == ymax:
+                            ymin -= 1.0; ymax += 1.0
+                        
+                        # Ensure minimum y-range of 30
+                        y_range = ymax - ymin
+                        if y_range < 30:
+                            center = (ymin + ymax) / 2
+                            ymin = center - 15
+                            ymax = center + 15
+                        
+                        pad = 0.05 * (ymax - ymin)
+                        ax.set_ylim(ymin - pad, ymax + pad)
+                # Only update plot if not in silent export mode
+                if not silent_export:
+                    fig.canvas.draw(); fig.canvas.flush_events()
 
             # Compose video frame (side-by-side), resize if heights differ
             if h1 != out_h:
@@ -1326,63 +1384,88 @@ def play_two_videos_with_live_plot(
             
             # Write frame to video if exporting
             if video_writer is not None and not paused:
-                # Create export canvas with videos on top and plot on bottom
-                export_canvas = np.zeros((export_h, export_w, 3), dtype=np.uint8)
-                
-                # Place videos on top row
-                if h1 != out_h:
-                    f1_resized = cv2.resize(f1, (w1, out_h))
+                if silent_export:
+                    # In silent export mode, create canvas only for videos
+                    export_canvas = np.zeros((export_h, export_w, 3), dtype=np.uint8)
+                    
+                    # Resize videos if needed
+                    if h1 != out_h:
+                        f1_resized = cv2.resize(f1, (w1, out_h))
+                    else:
+                        f1_resized = f1
+                    if h2 != out_h:
+                        f2_resized = cv2.resize(f2, (w2, out_h))
+                    else:
+                        f2_resized = f2
+                    
+                    # Place videos side by side (full height in silent mode)
+                    export_canvas[:out_h, :w1] = f1_resized
+                    export_canvas[:out_h, w1:w1+w2] = f2_resized
                 else:
-                    f1_resized = f1
-                if h2 != out_h:
-                    f2_resized = cv2.resize(f2, (w2, out_h))
+                    # In normal mode, create canvas for videos + plot
+                    export_canvas = np.zeros((export_h, export_w, 3), dtype=np.uint8)
+                    
+                    # Resize videos if needed
+                    if h1 != out_h:
+                        f1_resized = cv2.resize(f1, (w1, out_h))
+                    else:
+                        f1_resized = f1
+                    if h2 != out_h:
+                        f2_resized = cv2.resize(f2, (w2, out_h))
+                    else:
+                        f2_resized = f2
+                    
+                    # Place videos side by side in top row
+                    export_canvas[:out_h, :w1] = f1_resized
+                    export_canvas[:out_h, w1:w1+w2] = f2_resized
+                
+                # Capture matplotlib plot and add to bottom row (only in normal mode)
+                if not silent_export and fig is not None:
+                    try:
+                        # Convert matplotlib figure to image
+                        fig.canvas.draw()
+                        plot_img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+                        plot_img = plot_img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+                        
+                        # Calculate plot dimensions maintaining aspect ratio
+                        plot_h = plot_height
+                        plot_w = export_w
+                        
+                        # Get original plot dimensions
+                        orig_h, orig_w = plot_img.shape[:2]
+                        
+                        # Calculate scaling to fit in allocated space while maintaining aspect ratio
+                        scale_h = plot_h / orig_h
+                        scale_w = plot_w / orig_w
+                        scale = min(scale_h, scale_w)  # Use smaller scale to maintain aspect ratio
+                        
+                        # Calculate new dimensions
+                        new_w = int(orig_w * scale)
+                        new_h = int(orig_h * scale)
+                        
+                        # Resize plot maintaining aspect ratio
+                        plot_img_resized = cv2.resize(plot_img, (new_w, new_h))
+                        
+                        # Center the plot in the allocated space
+                        start_x = (plot_w - new_w) // 2
+                        start_y = out_h + (plot_h - new_h) // 2
+                        
+                        # Convert RGB to BGR for OpenCV
+                        plot_img_bgr = cv2.cvtColor(plot_img_resized, cv2.COLOR_RGB2BGR)
+                        
+                        # Place plot in bottom row, centered
+                        export_canvas[start_y:start_y+new_h, start_x:start_x+new_w] = plot_img_bgr
+                        
+                    except Exception as e:
+                        print(f"[export] Warning: Could not capture plot: {e}")
+                        # If plot capture fails, just use videos
+                        export_canvas = canvas
+                elif silent_export:
+                    # In silent export mode, no plot processing needed
+                    pass
                 else:
-                    f2_resized = f2
-                
-                # Place videos side by side in top row
-                export_canvas[:out_h, :w1] = f1_resized
-                export_canvas[:out_h, w1:w1+w2] = f2_resized
-                
-                # Capture matplotlib plot and add to bottom row
-                try:
-                    # Convert matplotlib figure to image
-                    fig.canvas.draw()
-                    plot_img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-                    plot_img = plot_img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-                    
-                    # Calculate plot dimensions maintaining aspect ratio
-                    plot_h = plot_height
-                    plot_w = export_w
-                    
-                    # Get original plot dimensions
-                    orig_h, orig_w = plot_img.shape[:2]
-                    
-                    # Calculate scaling to fit in allocated space while maintaining aspect ratio
-                    scale_h = plot_h / orig_h
-                    scale_w = plot_w / orig_w
-                    scale = min(scale_h, scale_w)  # Use smaller scale to maintain aspect ratio
-                    
-                    # Calculate new dimensions
-                    new_w = int(orig_w * scale)
-                    new_h = int(orig_h * scale)
-                    
-                    # Resize plot maintaining aspect ratio
-                    plot_img_resized = cv2.resize(plot_img, (new_w, new_h))
-                    
-                    # Center the plot in the allocated space
-                    start_x = (plot_w - new_w) // 2
-                    start_y = out_h + (plot_h - new_h) // 2
-                    
-                    # Convert RGB to BGR for OpenCV
-                    plot_img_bgr = cv2.cvtColor(plot_img_resized, cv2.COLOR_RGB2BGR)
-                    
-                    # Place plot in bottom row, centered
-                    export_canvas[start_y:start_y+new_h, start_x:start_x+new_w] = plot_img_bgr
-                    
-                except Exception as e:
-                    print(f"[export] Warning: Could not capture plot: {e}")
-                    # If plot capture fails, just use videos
-                    export_canvas = canvas
+                    # No plot available in normal mode
+                    print(f"[export] Warning: No plot available for export")
                 
                 video_writer.write(export_canvas)
             
@@ -1467,7 +1550,9 @@ def play_two_videos_with_live_plot(
             except Exception as e:
                 print(f"[export] Warning: Could not save details: {e}")
     
-    plt.ioff(); plt.show(block=False)
+    # Only show plot if not in silent export mode
+    if not silent_export:
+        plt.ioff(); plt.show(block=False)
 
 # -----------------------------
 # GUIq
@@ -1515,22 +1600,22 @@ def launch_gui():
     data_col_var = tk.StringVar(value="")
     hold_side_var = tk.StringVar(value="G2L")  # Detecting hold side for sync (G2L default)
     match_force_var = tk.StringVar(value="Fy")  # Force used for matching (default Fy)
-    offset_var = tk.DoubleVar(value=0.0)
+    offset_var = tk.DoubleVar(value=0.15)
     v1_off_var = tk.DoubleVar(value=0.0)
     v2_off_var = tk.DoubleVar(value=0.0)
     down_var = tk.IntVar(value=1)
     title_var = tk.StringVar(value="ICHs – Live synchronised plot")
     auto_sync_var = tk.BooleanVar(value=True)
     sync_method_var = tk.StringVar(value="motion")  # 'marker' or 'motion'
-    motion_video_var = tk.StringVar(value="backV")  # 'backV' or 'sideV' for motion detection
+    motion_video_var = tk.StringVar(value="sideV")  # 'backV' or 'sideV' for motion detection
     motion_metric_var = tk.StringVar(value="threshold_rising")  # 'peakForce', 'maxROFD_rising', 'maxROFD_falling', 'threshold_rising', 'threshold_falling', 'early_dent'
     motion_threshold_var = tk.DoubleVar(value=3.0)  # User input threshold for threshold-based metrics
     # Motion ROI (relative x,y,w,h). Default ROI; can be overridden via picker
     motion_roi_rel = [0.6, 0.2, 0.35, 0.6]
     # Video export options
-    export_video_var = tk.BooleanVar(value=False)
+    export_video_var = tk.BooleanVar(value=True)
     silent_export_var = tk.BooleanVar(value=False)  # Silent export without playback
-    export_path_var = tk.StringVar(value="")
+    export_path_var = tk.StringVar(value="/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/video_sync/")
     guid_var = tk.StringVar(value=str(uuid.uuid4()))
     status_var = tk.StringVar(value=f"GUID: {guid_var.get()}")
 
