@@ -124,7 +124,7 @@ file_order_bar_holds = ["039", "040", "041", "048", "047", "043", "042", "046", 
 order_for_wooden_holds = ["048","047", "046", "045"]
 plot_only_wooden_holds: bool = False  # Default setting for plotting only wooden holds
 
-use_custom_bar_order: bool = False # needs to true when setting your own order of plots
+use_custom_bar_order: bool = True # needs to true when setting your own order of plots
 
 # setting y limits for plots
 manual_y_limits_var = False

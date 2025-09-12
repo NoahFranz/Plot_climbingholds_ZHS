@@ -10,7 +10,7 @@ from scipy.signal import savgol_filter
 
 from utils import clean_data, get_min_max_values_per_column
 from utils import get_force_contact_times, compute_impulses_per_contact, trim_low_force_periods
-from additional_calculations import compute_hausdorff_dimensions_all_axes, calc_hausdorff_dimension_for_single_signal, plot_hausdorff_intervals
+from additional_calculations import compute_hausdorff_dimensions_all_axes, calc_hausdorff_dimension_for_single_signal, plot_hausdorff_intervals, hausdorff_dimension_boxcount
 
 
 # --- Neue Hilfsfunktion: Zeitbereich aus Kontaktzeiten bestimmen ---
@@ -263,6 +263,12 @@ def compute_interval_force_stats(file_data: Dict) -> None:
             mask = (df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)
             segment = df.loc[mask]
             current_interval = f"I{i+1}"
+            
+            # Debug: Show available columns for first interval
+            if i == 0:
+                print(f"DEBUG: Available columns in {side} DataFrame: {[col for col in df.columns if 'FgR' in col]}")
+                print(f"DEBUG: Available columns in segment: {[col for col in segment.columns if 'FgR' in col]}")
+            
             stats_entry = {
                 "interval_timing": (round(t0, 3), round(t1, 3)),
                 "duration_s": round(t1 - t0, 3)
@@ -270,10 +276,24 @@ def compute_interval_force_stats(file_data: Dict) -> None:
             for force in force_map:
                 if force.endswith("_sum"):
                     # Sum-Kanäle: exakte Präfix-Übereinstimmung (z.B. "Fy_sum [%]")
-                    force_cols = [
-                        col for col in df.columns
-                        if col.startswith(f"{force} ") or col == force
-                    ]
+                    # More robust column detection for sum forces
+                    force_cols = []
+                    for col in df.columns:
+                        # Check if column starts with the force name (with or without space)
+                        if col.startswith(force):
+                            force_cols.append(col)
+                        # Also check if column equals the force name exactly
+                        elif col == force:
+                            force_cols.append(col)
+                    
+                    # Debug output for sum forces
+                    if force == "FgR_sum":
+                        if not force_cols:
+                            print(f"DEBUG: No columns found for {force}. Available columns: {[col for col in df.columns if 'FgR' in col]}")
+                            print(f"DEBUG: Looking for columns starting with '{force}' or equal to '{force}'")
+                            print(f"DEBUG: All columns: {list(df.columns)}")
+                        else:
+                            print(f"DEBUG: Found columns for {force}: {force_cols}")
                 elif force in ("Fy", "Fz", "Fx", "Mz", "FgR", "Fres_xyz", "Fres_yz"):
                     # Basis-Kräfte: nur seiten-spezifische Kanäle (und NICHT *_sum)
                     force_cols = [
@@ -286,6 +306,13 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                 else:
                     # Fallback: exakter Präfix vor Einheit
                     force_cols = [col for col in df.columns if col.startswith(f"{force} ")]
+                
+                # Debug: Show what columns were found for each force
+                if force == "FgR_sum":
+                    print(f"DEBUG: Force '{force}' -> Found columns: {force_cols}")
+                    print(f"DEBUG: Column detection logic: force.endswith('_sum') = {force.endswith('_sum')}")
+                    print(f"DEBUG: Looking for: startswith('{force}' or == '{force}'")
+                
                 if force_cols:
                     force_cols = [force_cols[0]]
                     series = segment[force_cols[0]]
@@ -307,10 +334,15 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                         "maxROFD": round(maxROFD, 2) if maxROFD is not None else None,
                         "hausdorff": calc_hausdorff_dimension_for_single_signal(
                             time, series, current_side=side, current_force=force, current_interval=current_interval,
-                        )
+                        ),
+                        "hausdorff_R2": _get_hausdorff_r2(time, series)
                     }
                     stats_entry[force] = force_dict
                     stats_entry[force_map[force]] = round(impulse, 1)
+                else:
+                    # Debug output for missing forces
+                    if force == "FgR_sum":
+                        print(f"DEBUG: No columns found for {force} in interval {current_interval}. Available columns: {[col for col in df.columns if 'FgR' in col]}")
             stats_entry["interval_data"] = segment.to_dict(orient="list")
             interval_stats[f"I{i+1}"] = stats_entry
         # Mittelwerte über alle Intervalle hinweg berechnen
@@ -346,6 +378,17 @@ def compute_interval_force_stats(file_data: Dict) -> None:
                 df.drop(df[(df["Time [s]"] >= t0) & (df["Time [s]"] <= t1)].index, inplace=True)
         df.reset_index(drop=True, inplace=True)
         
+
+
+def _get_hausdorff_r2(time, series):
+    """Helper function to get R² value for Hausdorff dimension calculation."""
+    try:
+        if len(time) < 32:  # Too few points for reliable R²
+            return None
+        _, debug_info = hausdorff_dimension_boxcount(time, series, return_debug=True)
+        return round(debug_info.get("r2", 0), 3)
+    except Exception:
+        return None
 
 
 def calc_FgR(current_dict):
@@ -532,21 +575,26 @@ def export_data_to_excel(file_data, fname, folder_path):
                             # If hausdorff is not present, add it as None
                             if "hausdorff" not in row:
                                 row["hausdorff"] = None
+                            # Add hausdorff_R2 if not present
+                            if "hausdorff_R2" not in row:
+                                row["hausdorff_R2"] = None
                         else:
                             row["impuls"] = values  # für einfache Impulse wie Px, Py etc.
                             row["hausdorff"] = None
                         row.update(base_info)
                         int_rows.append(row)
                     # Add a DataFrame-compatible empty row after each interval
-                    int_rows.append({col: None for col in ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls", "hausdorff"]})
+                    int_rows.append({col: None for col in ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls", "hausdorff", "hausdorff_R2"]})
 
                 int_rows = [row for row in int_rows if row]  # Remove empty dicts
                 int_df = pd.DataFrame(int_rows)
-                cols = ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls", "hausdorff"]
+                cols = ["intervall_id", "interval_timing", "duration_s", "force", "max", "min", "mean", "impuls", "hausdorff", "hausdorff_R2"]
                 existing_cols = [col for col in cols if col in int_df.columns]
-                # Ensure 'hausdorff' is included in export columns
+                # Ensure 'hausdorff' and 'hausdorff_R2' are included in export columns
                 if "hausdorff" not in existing_cols:
                     existing_cols.append("hausdorff")
+                if "hausdorff_R2" not in existing_cols:
+                    existing_cols.append("hausdorff_R2")
                 int_df = int_df[existing_cols]
                 int_df.to_excel(writer, sheet_name=f"{side}_Intervals", index=False)
                 worksheet = writer.sheets[f"{side}_Intervals"]
@@ -823,3 +871,116 @@ def reset_invalid_intervals_from_gui():
     else:
         config.invalid_intervals_list.clear()
         print("No GUI override set. Clearing invalid_intervals_list.")
+
+
+# --- Lightweight LVM loader for live plotting ---
+def load_lvm(path: str) -> pd.DataFrame:
+    """
+    Load a .lvm file into a DataFrame suitable for live plotting, while:
+      1) Removing columns containing 'Comment', 'X_values'/'X_Value', or 'adc'
+      2) Computing side-wise resultants: Fres_xyz_1, Fres_xyz_2
+      3) Adding sums for Fx, Fy, Fz, Fres_xyz across sides
+      4) Normalising all force columns (Fx, Fy, Fz, Fres_xyz and their sums) to % body weight
+
+    Body weight is parsed from the filename via parse_metadata_from_filename
+    and converted to climberforce = kg * 9.81.
+
+    Returns the normalised DataFrame (time column is kept as in the source, typically 'Time [s]').
+    """
+    # 1) Read
+    df = pd.read_csv(path, sep="\t", decimal=",", header=21, engine="python", on_bad_lines="skip")
+    df.columns = df.columns.astype(str)
+    df = df.apply(pd.to_numeric, errors='coerce')
+
+    # 2) Clean columns using existing helper, then enforce extra drops
+    try:
+        df = clean_data(df)
+    except Exception:
+        # Fallback: keep df as-is if helper not available
+        pass
+    drop_tokens = ["comment", "x_values", "x_value", "adc"]
+    keep_cols = []
+    for c in df.columns:
+        lc = str(c).lower()
+        if any(tok in lc for tok in drop_tokens):
+            continue
+        keep_cols.append(c)
+    df = df[keep_cols]
+
+    # Helper to pick side-specific component column name (respects unit suffixes in names)
+    def _pick(col_prefix: str, side_suffix: str):
+        candidates = [c for c in df.columns if c.startswith(f"{col_prefix}_{side_suffix} ")]
+        return candidates[0] if candidates else None
+
+    # Determine unit per side from existing Fx/Fy/Fz columns
+    def _unit_for_side(side_suffix: str):
+        for base in ("Fy", "Fz", "Fx"):
+            c = _pick(base, side_suffix)
+            if c is not None:
+                return " [%]" if "[%]" in c else (" [N]" if "[N]" in c else None)
+        return None
+
+    # 3) Compute Fres_xyz_1 / Fres_xyz_2 if possible
+    for s in ("1", "2"):
+        fx_c = _pick("Fx", s)
+        fy_c = _pick("Fy", s)
+        fz_c = _pick("Fz", s)
+        unit = _unit_for_side(s) or " [N]"
+        if fx_c is not None and fy_c is not None and fz_c is not None:
+            fres = np.sqrt(df[fx_c]**2 + df[fy_c]**2 + df[fz_c]**2)
+            df.loc[:, f"Fres_xyz_{s}{unit}"] = fres
+
+    # 4) Add sums for Fx, Fy, Fz, Fres_xyz using existing helper
+    df = calc_force_sums(df)
+    # Also compute FgR_sum if both sides present
+    try:
+        df = calc_fgr_sum(df)
+    except Exception:
+        pass
+
+    # 5) Normalise to % body weight using filename metadata
+    file_stem = os.path.splitext(os.path.basename(path))[0]
+    md = parse_metadata_from_filename(file_stem)
+    kg = md.get("weight", None)
+    climberforce = float(kg * 9.81) if isinstance(kg, (int, float)) else None
+
+    if climberforce and climberforce > 0:
+        # Normalise base forces first using existing helper (Fx, Fy, Fz, Mz)
+        try:
+            # Make a copy and protect pre-normalised FgR_* columns by restoring them after
+            fg_cols = [c for c in df.columns if c.startswith('FgR_')]
+            backup = df[fg_cols].copy() if fg_cols else None
+            normalize_forces_by_weight(df, climberforce)
+            if backup is not None:
+                for c in backup.columns:
+                    if c in df.columns:
+                        df[c] = backup[c]
+        except Exception:
+            # Manual normalisation for Fx/Fy/Fz if helper is unavailable
+            for base in ("Fx", "Fy", "Fz"):
+                for col in list(df.columns):
+                    if col.startswith(f"{base}_") and "[N]" in col:
+                        df[col] = (df[col] / climberforce) * 100.0
+                        df.rename(columns={col: col.replace("[N]", "[%]")}, inplace=True)
+
+        # Normalise Fres_xyz (side-specific and sums) if present in Newton
+        for col in list(df.columns):
+            if col.startswith("Fres_xyz") and "[N]" in col:
+                df[col] = (df[col] / climberforce) * 100.0
+                df.rename(columns={col: col.replace("[N]", "[%]")}, inplace=True)
+
+        # Ensure sums exist in % (recompute after normalisation)
+        df = calc_force_sums(df)
+        try:
+            df = calc_fgr_sum(df)
+        except Exception:
+            pass
+
+    # Put time column first if present
+    time_like = [c for c in df.columns if c.lower().startswith("time")]
+    if time_like:
+        time_col = time_like[0]
+        other_cols = [c for c in df.columns if c != time_col]
+        df = df[[time_col] + other_cols]
+
+    return df.reset_index(drop=True)

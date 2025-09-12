@@ -91,6 +91,7 @@ def construct_force_key(force_component: str, side_key: str) -> str:
         "Fz": " [%]",
         "Fx": " [%]",
         "Mz": " [Nm]",
+        "FgR": " [%]",
         "FgR_sum": " [%]",
         "Fy_sum": " [%]",
         "Fz_sum": " [%]",
@@ -101,6 +102,11 @@ def construct_force_key(force_component: str, side_key: str) -> str:
     }
     unit = unit_map.get(force_component, "")
 
+    # Special handling for FgR: use side-specific grip force
+    if force_component == "FgR":
+        return f"FgR_{side_suffix}{unit}"
+    
+    # Components that are already aggregated (no per-sensor suffix in JSON)
     if force_component in no_suffix_components:
         # e.g., "FgR_sum [%]" or "Fres_yz"
         return f"{force_component}{unit}"
@@ -600,6 +606,34 @@ def calculate_reliability_metric(json_path: str, re_metric: str, force_component
         re_metric (str): Metric to extract; one of "mean", "max", "duration_s".
     """
     import pandas as pd
+    
+    # Debug: Print available data sources in the JSON
+    print(f"\n=== DEBUG: Available data sources for {force_component} ===")
+    data = load_data(json_path)
+    for file_key, file_content in data.items():
+        if "G1R" in file_content:
+            g1r_intervals = file_content["G1R"].get("intervals", {})
+            print(f"\nFile {file_key} - G1R intervals:")
+            for int_key, int_data in g1r_intervals.items():
+                if int_key != "Mean-Metrics":
+                    print(f"  {int_key}: Available keys: {list(int_data.keys())}")
+                    if "Fres_xyz" in int_data:
+                        print(f"    Fres_xyz: {list(int_data['Fres_xyz'].keys())}")
+                    if "FgR_1" in int_data:
+                        print(f"    FgR_1: {list(int_data['FgR_1'].keys())}")
+                    if "FgR_sum" in int_data:
+                        print(f"    FgR_sum: {list(int_data['FgR_sum'].keys())}")
+            
+            mean_metrics = g1r_intervals.get("Mean-Metrics", {})
+            print(f"  Mean-Metrics: Available keys: {list(mean_metrics.keys())}")
+            if "Fres_xyz" in mean_metrics:
+                print(f"    Fres_xyz: {list(mean_metrics['Fres_xyz'].keys())}")
+            if "FgR_1" in mean_metrics:
+                print(f"    FgR_1: {list(mean_metrics['FgR_1'].keys())}")
+            if "FgR_sum" in mean_metrics:
+                print(f"    FgR_sum: {list(mean_metrics['FgR_sum'].keys())}")
+    
+    print("=== END DEBUG ===\n")
 
     assert re_metric in ["mean", "max", "duration_s"], "Invalid metric selected."
 
@@ -634,7 +668,36 @@ def calculate_reliability_metric(json_path: str, re_metric: str, force_component
                     if re_metric == "duration_s":
                         interval_value = interval_data.get("duration_s", None)
                     else:
+                        # Try to get the force component data
                         interval_value = interval_data.get(force_component, {}).get(re_metric, None)
+                        
+                        # Special fallback for Fres: if not found, try Fres_xyz
+                        if interval_value is None and force_component == "Fres":
+                            interval_value = interval_data.get("Fres_xyz", {}).get(re_metric, None)
+                            if interval_value is not None:
+                                print(f"Fres: Using Fres_xyz fallback for {side}, interval {int_key}, value: {interval_value}")
+                        
+                        # Special handling for FgR: use side-specific grip force
+                        if interval_value is None and force_component == "FgR":
+                            # For FgR, use side-specific data: FgR_1 for G1R, FgR_2 for G2L
+                            side_suffix = "1" if side == "G1R" else "2"
+                            fgr_key = f"FgR_{side_suffix}"
+                            interval_value = interval_data.get(fgr_key, {}).get(re_metric, None)
+                            if interval_value is not None:
+                                print(f"FgR: Using {fgr_key} for {side}, interval {int_key}, value: {interval_value}")
+                        
+                        # Debug: Show which data source is being used
+                        if interval_value is not None:
+                            print(f"Data source for {force_component} on {side}, interval {int_key}: {interval_value}")
+                            # Check if this value exists in other force components
+                            if force_component == "Fres":
+                                fgr_check = interval_data.get("FgR_1" if side == "G1R" else "FgR_2", {}).get(re_metric, None)
+                                if fgr_check is not None:
+                                    print(f"  -> Same value found in FgR: {fgr_check}")
+                            elif force_component == "FgR":
+                                fres_check = interval_data.get("Fres_xyz", {}).get(re_metric, None)
+                                if fres_check is not None:
+                                    print(f"  -> Same value found in Fres: {fres_check}")
 
                     # Extract the force component dictionary (e.g., Fy, Fz)
                     if interval_value is not None:
@@ -647,7 +710,34 @@ def calculate_reliability_metric(json_path: str, re_metric: str, force_component
 
                 # Store values per session label
                 records[label].append(metric_values)
-                print("records", records)
+                print(f"records for {label}: {metric_values}")
+                
+                # Debug: Compare values between Fres and FgR if both are being processed
+                if force_component in ["Fres", "FgR"]:
+                    print(f"DEBUG: {force_component} values for {label}: {metric_values}")
+                    # Check if we can access the other component's data for comparison
+                    if force_component == "Fres":
+                        # Try to get FgR values for comparison
+                        fgr_values = []
+                        for int_key, interval_data in intervals.items():
+                            if int_key != "Mean-Metrics":
+                                side_suffix = "1" if side == "G1R" else "2"
+                                fgr_key = f"FgR_{side_suffix}"
+                                fgr_val = interval_data.get(fgr_key, {}).get(re_metric, None)
+                                if fgr_val is not None:
+                                    fgr_values.append(fgr_val)
+                        if fgr_values:
+                            print(f"DEBUG: FgR values for comparison: {fgr_values}")
+                    elif force_component == "FgR":
+                        # Try to get Fres values for comparison
+                        fres_values = []
+                        for int_key, interval_data in intervals.items():
+                            if int_key != "Mean-Metrics":
+                                fres_val = interval_data.get("Fres_xyz", {}).get(re_metric, None)
+                                if fres_val is not None:
+                                    fres_values.append(fres_val)
+                        if fres_values:
+                            print(f"DEBUG: Fres values for comparison: {fres_values}")
 
             # Prepare the DataFrame with header row and interval labels
             df = pd.DataFrame(columns=[""] + interval_labels + ["Mean"])
@@ -671,7 +761,36 @@ def calculate_reliability_metric(json_path: str, re_metric: str, force_component
                 if re_metric == "duration_s":
                     mean_val = mean_metrics.get("Contacttime", {}).get("mean", None)
                 else:
+                    # Try to get the force component data
                     mean_val = mean_metrics.get(force_component, {}).get(re_metric, None)
+                    
+                    # Special fallback for Fres: if not found, try Fres_xyz
+                    if mean_val is None and force_component == "Fres":
+                        mean_val = mean_metrics.get("Fres_xyz", {}).get(re_metric, None)
+                        if mean_val is not None:
+                            print(f"Fres Mean: Using Fres_xyz fallback for {side}, value: {mean_val}")
+                    
+                    # Special handling for FgR: use side-specific grip force
+                    if mean_val is None and force_component == "FgR":
+                        # For FgR, use side-specific data: FgR_1 for G1R, FgR_2 for G2L
+                        side_suffix = "1" if side == "G1R" else "2"
+                        fgr_key = f"FgR_{side_suffix}"
+                        mean_val = mean_metrics.get(fgr_key, {}).get(re_metric, None)
+                        if mean_val is not None:
+                            print(f"FgR Mean: Using {fgr_key} for {side}, value: {mean_val}")
+                    
+                    # Debug: Show which mean data source is being used
+                    if mean_val is not None:
+                        print(f"Mean data source for {force_component} on {side}: {mean_val}")
+                        # Check if this value exists in other force components
+                        if force_component == "Fres":
+                            fgr_mean_check = mean_metrics.get("FgR_1" if side == "G1R" else "FgR_2", {}).get(re_metric, None)
+                            if fgr_mean_check is not None:
+                                print(f"  -> Same mean value found in FgR: {fgr_mean_check}")
+                        elif force_component == "FgR":
+                            fres_mean_check = mean_metrics.get("Fres_xyz", {}).get(re_metric, None)
+                            if fres_mean_check is not None:
+                                print(f"  -> Same mean value found in Fres: {fres_mean_check}")
                 if mean_val is not None:
                     df.loc[0 if label == "Test" else 1, "Mean"] = mean_val
 
@@ -681,17 +800,40 @@ def calculate_reliability_metric(json_path: str, re_metric: str, force_component
             worksheet.cell(row=1, column=1, value=table_name)
 
         print(f"Reliability metric exported to: {out_path}")
+        
+        # Final debug summary
+        print(f"\n=== FINAL DEBUG SUMMARY for {force_component} ===")
+        print(f"Total Test records: {len(records.get('Test', []))}")
+        print(f"Total Retest records: {len(records.get('Retest', []))}")
+        if 'Test' in records and records['Test']:
+            print(f"Test values: {records['Test']}")
+        if 'Retest' in records and records['Retest']:
+            print(f"Retest values: {records['Retest']}")
+        print("=== END FINAL DEBUG ===\n")
 def append_reliability_stats_to_excel(file_path: str) -> None:
     """Load an Excel file with Test/Retest rows, compute SEM, MDC, CoV, and write results back to the same file."""
     import pandas as pd
     import numpy as np
     from openpyxl import load_workbook
 
+    # First, read the existing file to get the data
     df = pd.read_excel(file_path, sheet_name=None)
+    
+    # Close the file to ensure it's not locked
+    import time
+    time.sleep(0.1)  # Small delay to ensure file is closed
+    
+    # Now append the statistics
     with pd.ExcelWriter(file_path, engine='openpyxl', mode='a', if_sheet_exists='overlay') as writer:
         for sheet_name, table in df.items():
             if table.empty or table.shape[0] < 2:
+                print(f"Skipping sheet {sheet_name}: Empty or insufficient data (shape: {table.shape})")
                 continue
+            
+            # Debug: Print table structure
+            print(f"Processing sheet {sheet_name}: Shape {table.shape}, Columns: {list(table.columns)}")
+            print(f"First few rows of {sheet_name}:")
+            print(table.head())
 
             try:
                 # Dynamically find rows labeled 'Test' and 'Retest' in column 0
@@ -702,11 +844,28 @@ def append_reliability_stats_to_excel(file_path: str) -> None:
                     print(f"Skipping sheet {sheet_name}: 'Test' or 'Retest' row not found.")
                     continue
 
-                test_vals = test_row.iloc[0, 1:-1].dropna().astype(float).values
-                retest_vals = retest_row.iloc[0, 1:-1].dropna().astype(float).values
+                # Get the actual row indices for test and retest
+                test_idx = test_row.index[0]
+                retest_idx = retest_row.index[0]
+                
+                # Get all columns except the first (label) and last (mean) columns
+                # This gives us the interval columns (I1, I2, I3, etc.)
+                interval_columns = table.columns[1:-1] if len(table.columns) > 2 else table.columns[1:]
+                
+                # Extract values for the interval columns only
+                test_vals = table.loc[test_idx, interval_columns].dropna().astype(float).values
+                retest_vals = table.loc[retest_idx, interval_columns].dropna().astype(float).values
 
-                if len(test_vals) != len(retest_vals):
+                if len(test_vals) == 0 or len(retest_vals) == 0:
+                    print(f"Skipping sheet {sheet_name}: No valid interval data found.")
                     continue
+                    
+                if len(test_vals) != len(retest_vals):
+                    print(f"Skipping sheet {sheet_name}: Test and Retest have different numbers of intervals ({len(test_vals)} vs {len(retest_vals)}).")
+                    continue
+                
+                # Debug information
+                print(f"Processing sheet {sheet_name}: Test values: {test_vals}, Retest values: {retest_vals}")
 
                 diffs = test_vals - retest_vals
                 sem = np.std(diffs, ddof=1) / np.sqrt(2)
@@ -730,6 +889,9 @@ def append_reliability_stats_to_excel(file_path: str) -> None:
 
             except Exception as e:
                 print(f"Skipping sheet {sheet_name} due to error: {e}")
+                print(f"Error type: {type(e).__name__}")
+                import traceback
+                print(f"Full traceback: {traceback.format_exc()}")
 def export_STD_CoV_for_trials(json_path: str, force_component: str) -> None:
     import pandas as pd
     data = load_data(json_path)
@@ -829,6 +991,25 @@ if __name__ == "__main__":
     # Attach the frame to the canvas
     scrollable_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 
+    # Welcome and explanation section
+    welcome_frame = tk.LabelFrame(scrollable_frame, text="📊 Plot Overlay Tool - Overview", padx=10, pady=10)
+    welcome_frame.pack(fill="x", padx=10, pady=(10, 15))
+    
+    tk.Label(welcome_frame, text="This tool processes climbing force data from JSON files and creates:", 
+             font=("Arial", 9, "bold")).pack(anchor="w")
+    
+    # Workflow explanation
+    workflow_frame = tk.Frame(welcome_frame)
+    workflow_frame.pack(fill="x", padx=10, pady=(5, 0))
+    
+    tk.Label(workflow_frame, text="1. 📈 Force interval plots (single trials)", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(workflow_frame, text="2. 🔄 Test-Retest comparisons", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(workflow_frame, text="3. 📊 Reliability metrics (SEM, MDC, CoV)", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(workflow_frame, text="4. 📋 Statistical summaries (STD, CoV per trial)", font=("Arial", 8)).pack(anchor="w")
+    
+    tk.Label(welcome_frame, text="Select your options below and click OK to run the analysis.", 
+             font=("Arial", 8), fg="blue").pack(anchor="w", pady=(5, 0))
+
     # Variables bound to each control
     show_trial_mean_per_file = tk.BooleanVar(value=True)
     tk.Checkbutton(scrollable_frame, text="     Option: Show Mean per Trial", variable=show_trial_mean_per_file).pack(anchor="w", padx=10, pady=2)
@@ -887,15 +1068,60 @@ if __name__ == "__main__":
     tk.Label(scrollable_frame, text="Force Component:").pack(anchor="w", padx=10, pady=(10,0))
     ttk.OptionMenu(
         scrollable_frame, GUI_force_comp, GUI_force_comp.get(),
-        "Fy", "Fz", "Fx", "Fres", "FgR_sum", "Fy_sum", "Fz_sum", "Fx_sum"
+        "Fy", "Fz", "Fx", "Fres", "FgR", "FgR_sum", "Fy_sum", "Fz_sum", "Fx_sum"
     ).pack(anchor="w", padx=20)
+    
+    # Force component explanations
+    force_explanations = tk.Frame(scrollable_frame)
+    force_explanations.pack(fill="x", padx=20, pady=(0, 10))
+    
+    tk.Label(force_explanations, text="Force Component Explanations:", font=("Arial", 9, "bold")).pack(anchor="w")
+    
+    # Create a frame for force explanations with better layout
+    explanations_frame = tk.Frame(force_explanations)
+    explanations_frame.pack(fill="x", padx=10)
+    
+    # Left column
+    left_col = tk.Frame(explanations_frame)
+    left_col.pack(side="left", fill="both", expand=True)
+    
+    tk.Label(left_col, text="• Fy: Vertical force (up/down)", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(left_col, text="• Fz: Forward/backward force", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(left_col, text="• Fx: Side-to-side force", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(left_col, text="• Fres: Resultant force (√Fy²+Fz²+Fx²)", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(left_col, text="• FgR: Side-specific grip force (FgR_1 for G1R, FgR_2 for G2L)", font=("Arial", 8)).pack(anchor="w")
+    
+    # Right column
+    right_col = tk.Frame(explanations_frame)
+    right_col.pack(side="right", fill="both", expand=True)
+    
+    tk.Label(right_col, text="• FgR_sum: Grip force sum", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(right_col, text="• Fy_sum: Sum of Y forces", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(right_col, text="• Fz_sum: Sum of Z forces", font=("Arial", 8)).pack(anchor="w")
+    tk.Label(right_col, text="• Fx_sum: Sum of X forces", font=("Arial", 8)).pack(anchor="w")
+    
+    # Special notes about force components
+    tk.Label(force_explanations, text="💡 Note: Fres automatically uses Fres_xyz data if available", 
+             font=("Arial", 8), fg="green").pack(anchor="w", pady=(5, 0))
+    tk.Label(force_explanations, text="💡 Note: FgR uses side-specific data (FgR_1 for G1R, FgR_2 for G2L)", 
+             font=("Arial", 8), fg="green").pack(anchor="w", pady=(2, 0))
 
     # Frame for Looping combinations
-    loop_frame = tk.LabelFrame(scrollable_frame, text="Looping", padx=10, pady=5)
+    loop_frame = tk.LabelFrame(scrollable_frame, text="Looping - Process Multiple Forces & Metrics", padx=10, pady=5)
     loop_frame.pack(fill="both", expand="yes", padx=10, pady=(10, 0))
 
     # Add a checkbox to enable looping
     tk.Checkbutton(loop_frame, text="Enable Looping", variable=loop_forces_enabled).pack(anchor="w", padx=20)
+    
+    # Looping explanation
+    tk.Label(loop_frame, text="Looping allows you to process multiple force components and metrics automatically.", 
+             font=("Arial", 8), fg="blue").pack(anchor="w", padx=20, pady=(5, 0))
+    tk.Label(loop_frame, text="When enabled, the script will run for each selected force and metric combination.", 
+             font=("Arial", 8), fg="blue").pack(anchor="w", padx=20)
+    
+    # Looping tip
+    tk.Label(loop_frame, text="💡 Tip: Use looping to batch-process multiple analyses at once!", 
+             font=("Arial", 8), fg="green").pack(anchor="w", padx=20, pady=(5, 0))
 
     loop_forces = {
         "Fy": tk.BooleanVar(value=False),
@@ -903,6 +1129,7 @@ if __name__ == "__main__":
         "Fx": tk.BooleanVar(value=False),
         "Mz": tk.BooleanVar(value=False),
         "Fres": tk.BooleanVar(value=False),
+        "FgR": tk.BooleanVar(value=False),
         "FgR_sum": tk.BooleanVar(value=False),
         "Fy_sum": tk.BooleanVar(value=False),
         "Fz_sum": tk.BooleanVar(value=False),
@@ -915,21 +1142,95 @@ if __name__ == "__main__":
         "duration_s": tk.BooleanVar(value=False),
     }
 
-    tk.Label(loop_frame, text="Forces:").pack(anchor="w", padx=10)
+    tk.Label(loop_frame, text="Forces (select which force components to process):", font=("Arial", 9, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+    
+    # Create a frame for force checkboxes with hints
+    forces_frame = tk.Frame(loop_frame)
+    forces_frame.pack(fill="x", padx=20)
+    
+    # Left column for forces
+    forces_left = tk.Frame(forces_frame)
+    forces_left.pack(side="left", fill="both", expand=True)
+    
+    # Right column for force hints
+    forces_right = tk.Frame(forces_frame)
+    forces_right.pack(side="right", fill="both", expand=True)
+    
+    # Add force checkboxes with hints
+    force_hints = {
+        "Fy": "Vertical force",
+        "Fz": "Forward/backward force", 
+        "Fx": "Side-to-side force",
+        "Mz": "Moment around Z-axis",
+        "Fres": "Resultant force magnitude",
+        "FgR": "Side-specific grip force (FgR_1/FgR_2)",
+        "FgR_sum": "Grip force sum",
+        "Fy_sum": "Sum of Y forces",
+        "Fz_sum": "Sum of Z forces",
+        "Fx_sum": "Sum of X forces"
+    }
+    
     for name, var in loop_forces.items():
-        tk.Checkbutton(loop_frame, text=name, variable=var).pack(anchor="w", padx=20)
+        # Create a frame for each force checkbox and hint
+        force_row = tk.Frame(forces_frame)
+        force_row.pack(fill="x", pady=1)
+        
+        # Checkbox on the left
+        tk.Checkbutton(force_row, text=name, variable=var).pack(side="left")
+        
+        # Hint on the right
+        hint_text = force_hints.get(name, "")
+        tk.Label(force_row, text=f"({hint_text})", font=("Arial", 7), fg="gray").pack(side="right", padx=(10, 0))
 
-    tk.Label(loop_frame, text="Metrics:").pack(anchor="w", padx=10)
+    tk.Label(loop_frame, text="Metrics (select which statistical measures to calculate):", font=("Arial", 9, "bold")).pack(anchor="w", padx=10, pady=(15, 5))
+    
+    # Create a frame for metric checkboxes with hints
+    metrics_frame = tk.Frame(loop_frame)
+    metrics_frame.pack(fill="x", padx=20)
+    
+    # Add metric checkboxes with hints
+    metric_hints = {
+        "mean": "Average value across intervals",
+        "max": "Peak/maximum value",
+        "duration_s": "Contact time duration"
+    }
+    
     for name, var in loop_metrics.items():
-        tk.Checkbutton(loop_frame, text=name, variable=var).pack(anchor="w", padx=20)
+        # Create a frame for each metric checkbox and hint
+        metric_row = tk.Frame(metrics_frame)
+        metric_row.pack(fill="x", pady=1)
+        
+        # Checkbox on the left
+        tk.Checkbutton(metric_row, text=name, variable=var).pack(side="left")
+        
+        # Hint on the right
+        hint_text = metric_hints.get(name, "")
+        tk.Label(metric_row, text=f"({hint_text})", font=("Arial", 7), fg="gray").pack(side="right", padx=(10, 0))
 
+    # Reliability metrics explanation
+    tk.Label(rel_frame, text="Reliability Analysis - Test-Retest Consistency:", font=("Arial", 9, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+    tk.Label(rel_frame, text="Calculates SEM (Standard Error of Measurement), MDC (Minimal Detectable Change),", 
+             font=("Arial", 8), fg="blue").pack(anchor="w", padx=20)
+    tk.Label(rel_frame, text="and CoV (Coefficient of Variation) for test-retest reliability assessment.", 
+             font=("Arial", 8), fg="blue").pack(anchor="w", padx=20)
+    
     calc_rel_metric = tk.BooleanVar(value=False)
     tk.Checkbutton(rel_frame, text="Calculate Reliability Metrics", variable=calc_rel_metric).pack(anchor="w")
+    
     append_stats = tk.BooleanVar(value=False)
     tk.Checkbutton(rel_frame, text="Append SEM/MDC/CoV to Excel", variable=append_stats).pack(anchor="w")
-    tk.Label(rel_frame, text="Metric:").pack(anchor="w", padx=10, pady=(5, 0))
+    
+    tk.Label(rel_frame, text="Reliability Metric Type:", font=("Arial", 9, "bold")).pack(anchor="w", padx=10, pady=(10, 0))
     re_metric_selection = tk.StringVar(value="mean")
     ttk.OptionMenu(rel_frame, re_metric_selection, "mean", "mean", "max", "duration_s").pack(anchor="w", padx=20)
+    
+    # Metric type explanations
+    metric_explanations = tk.Frame(rel_frame)
+    metric_explanations.pack(fill="x", padx=20, pady=(5, 10))
+    
+    tk.Label(metric_explanations, text="• mean: Average force across intervals (most common)", font=("Arial", 7), fg="gray").pack(anchor="w")
+    tk.Label(metric_explanations, text="• max: Peak force values (for strength assessment)", font=("Arial", 7), fg="gray").pack(anchor="w")
+    tk.Label(metric_explanations, text="• duration_s: Contact time duration (for timing analysis)", font=("Arial", 7), fg="gray").pack(anchor="w")
 
     # OK button to close dialog
     # Cancel button to terminate without action
@@ -992,16 +1293,20 @@ if __name__ == "__main__":
     # Path to your JSONs (adjust as needed)
     import glob
     json_dirs = [
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black/front"
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow/front"
+        "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik/Rightside_data"
+       # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/Test-Rest/further metrics"
         #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/cross",
         #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow/cross",
         #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black/cross",
 #        "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front",
 #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black/front",
 #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow/front",
-"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Trail",
-"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Perf",
-"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/HighEnd",
-"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Basic",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Trail",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Perf",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/HighEnd",
+#"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/sorted_by_shoes/front/Basic",
         #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/cross"
        # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/cross+front-combined",
         #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front"
@@ -1091,15 +1396,25 @@ if __name__ == "__main__":
                         force_component=GUI_force_component
                     )
 
-        # Optionally run post-processing on Excel output
-        if do_append_stats:
-            # Update with actual output file if dynamic
-            # Keep the loop over output_dir as is
-            output_dir = json_dirs
-            for root, dirs, files in os.walk(output_dir):
-                for file in files:
-                    if file.startswith("Reliability_") and file.endswith(".xlsx"):
-                        append_reliability_stats_to_excel(os.path.join(root, file))
+        # Always append SEM/MDC/CoV when reliability metrics are calculated
+        if calc_reliability_metrics:
+            print("Appending SEM, MDC, and CoV to reliability Excel files...")
+            # Process each directory separately since json_dirs is a list
+            for output_dir in json_dirs:
+                for root, dirs, files in os.walk(output_dir):
+                    for file in files:
+                        if file.startswith("Reliability_") and file.endswith(".xlsx"):
+                            append_reliability_stats_to_excel(os.path.join(root, file))
+            print("SEM, MDC, and CoV appended to reliability Excel files.")
+        # Also run post-processing if explicitly requested via checkbox
+        elif do_append_stats:
+            print("Appending SEM, MDC, and CoV to reliability Excel files (manual request)...")
+            # Process each directory separately since json_dirs is a list
+            for output_dir in json_dirs:
+                for root, dirs, files in os.walk(output_dir):
+                    for file in files:
+                        if file.startswith("Reliability_") and file.endswith(".xlsx"):
+                            append_reliability_stats_to_excel(os.path.join(root, file))
             print("SEM, MDC, and CoV appended to reliability Excel files.")
 
         if export_std_cov_trials:

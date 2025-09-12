@@ -1028,11 +1028,22 @@ def plot_mean_metrics_bar(
         print(f"Keine gültigen Daten für {side}, Diagramm wird übersprungen.")
         return
 
+    # Check if there are any forces to plot
+    if not mapped_forces:
+        print(f"Keine Kräfte zum Plotten für {side}, Diagramm wird übersprungen.")
+        return
+
     plot_data = np.array(plot_data, dtype=float)
     error_data = np.array(error_data, dtype=float)
     if plot_data.ndim == 1:
         plot_data = plot_data[:, np.newaxis]
         error_data = error_data[:, np.newaxis]
+    
+    # Additional safety check: ensure plot_data has at least one column
+    if plot_data.shape[1] == 0:
+        print(f"Keine Spalten in plot_data für {side}, Diagramm wird übersprungen.")
+        return
+        
     x = np.arange(len(labels))
     width = 0.8 / plot_data.shape[1]
 

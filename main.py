@@ -113,7 +113,14 @@ def main():
     config.processing_settings = copy.deepcopy(settings)
 
     folder_list = [
-     "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe/onlywood",
+    # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe/onlywood",
+     "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Griffe"
+     #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black/front"
+     #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow/front"
+    # "/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Technik/Rightside_data"
+     #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Reliability/Test-Rest/further metrics"
+     #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/shakeout"
+     #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Clipping"
 #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/best-grey/front",
 #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/worst-black/front",
 #"/Users/noah/LRZ Sync+Share/MA/ZHS_LabView_Messungen/Exploration_V2/Shoes_and_footholds/medium-yellow/front"
@@ -250,6 +257,11 @@ def main():
 
                 if config.plot_settings.get("plot_mean_metrics_bar", False):
                     print("Plot: plot_mean_metrics_bar aktiviert")
+                    # Check if there are any forces to plot
+                    if not unique_force_list:
+                        print("Warnung: Keine Kräfte zum Plotten ausgewählt. plot_mean_metrics_bar wird übersprungen.")
+                        continue
+                        
                     loop = True
                     if loop:
                         selected_metrics_list = ["max", "mean",]
